@@ -5,6 +5,8 @@ const landlordRoutes = require("./landlord.routes");
 const tenantRoutes = require("./tenant.routes");
 const leaseRoutes = require("./lease.routes");
 const uploadRoutes = require("./upload.routes");
+const leasePrerequisiteRoutes = require("./leasePrerequisite.routes");
+const leasePaymentRoutes = require("./leasePayment.routes");
 const docusignRoutes = require("./docusign.routes");
 // const financeRoutes = require("./finance.routes");
 // const notificationRoutes = require("./notification.routes");
@@ -18,6 +20,8 @@ router.use("/tenants", tenantRoutes);
 router.use("/leases", leaseRoutes);
 router.use("/upload", uploadRoutes);
 router.use("/leases/docusign", docusignRoutes);
+router.use("/lease-prerequisites", leasePrerequisiteRoutes);
+router.use("/lease-payments", leasePaymentRoutes);
 // router.use("/finance", financeRoutes);
 // router.use("/notifications", notificationRoutes);
 

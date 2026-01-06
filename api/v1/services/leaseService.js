@@ -5,6 +5,7 @@ const Landlord = require("../../../models/Landlord");
 const TenantService = require("./tenantService");
 const DocuSignEnvelope = require("../../../models/DocuSignEnvelope");
 const LeaseDocument = require("../../../models/LeaseDocument");
+const LeasePrerequisiteService = require("./leasePrerequisiteService");
 const AppError = require("../../../utils/appError");
 const { formatDateForStorage } = require("../../../utils/dateUtils");
 const LeaseReturnDTO = require("../../../dtos/return/LeaseDTO");
@@ -199,6 +200,9 @@ class LeaseService {
       lease.inspectionNotes = data.inspectionNotes;
       await lease.save();
     }
+
+    // Create default prerequisites for this lease (first rent, security deposit, documents signed)
+    await LeasePrerequisiteService.createDefaultForLease(lease, agentId);
 
     if (files && files.documents) {
       const documentFiles = Array.isArray(files.documents) ? files.documents : [files.documents];
@@ -533,6 +537,15 @@ class LeaseService {
       throw new AppError(`Cannot move lease to PENDING_START from ${lease.status} status`, 400);
     }
 
+    const requiredIncomplete = await LeasePrerequisiteService.getRequiredIncompleteCount(lease._id);
+
+    if (requiredIncomplete > 0) {
+      lease.readyToStart = false;
+      lease.canStartReason = "Complete all required prerequisites before starting the lease.";
+      await lease.save();
+      throw new AppError("Cannot move to PENDING_START. Required prerequisites are not completed.", 400);
+    }
+
     lease.status = 'PENDING_START';
     lease.readyToStart = true;
     lease.canStartReason = null;
@@ -569,7 +582,12 @@ class LeaseService {
       throw new AppError(`Cannot activate lease from ${lease.status} status. Lease must be in PENDING_START or DRAFT status`, 400);
     }
 
-    if (!lease.readyToStart && lease.status === 'PENDING_START') {
+    const requiredIncomplete = await LeasePrerequisiteService.getRequiredIncompleteCount(lease._id);
+
+    if (requiredIncomplete > 0) {
+      lease.readyToStart = false;
+      lease.canStartReason = "Complete all required prerequisites before starting the lease.";
+      await lease.save();
       throw new AppError('Lease is not ready to start. Please complete all prerequisites', 400);
     }
 
@@ -667,6 +685,27 @@ class LeaseService {
       .lean();
 
     return LeaseReturnDTO.setDTO(populatedLease);
+  }
+
+  static async getActiveLeasesForPayments(fromDate, toDate) {
+    const leases = await Lease.find({
+      status: "ACTIVE",
+    })
+      .select("_id agentId rentAmount dueDay startDate")
+      .lean();
+
+    const result = [];
+    for (const lease of leases) {
+      const nextDue = new Date(fromDate);
+      nextDue.setUTCDate(lease.dueDay || 1);
+      if (nextDue >= fromDate && nextDue <= toDate) {
+        result.push({
+          ...lease,
+          nextDueDate: nextDue,
+        });
+      }
+    }
+    return result;
   }
 
   static async checkAndTerminateExpiredLeases() {

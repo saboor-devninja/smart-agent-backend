@@ -139,13 +139,25 @@ async function updateLeaseDocumentsAfterSigning(envelopeId, completedAt) {
 
     console.log(`Updated ${documents.length} lease documents with signed version`);
 
-    // Also update the related lease signedAt field if we have a completion time
-    if (envelope.leaseId && completedAt) {
+    // Also update the related lease signedAt field and documents-signed prerequisite if we have a completion time
+    if (envelope?.leaseId && completedAt) {
       await Lease.updateOne(
         { _id: envelope.leaseId },
         { $set: { signedAt: completedAt } }
       );
       console.log(`Updated lease ${envelope.leaseId} signedAt to ${completedAt.toISOString()}`);
+
+      const LeasePrerequisite = require("../../models/LeasePrerequisite");
+      await LeasePrerequisite.updateOne(
+        { leaseId: envelope.leaseId, type: "DOCUMENTS_SIGNED" },
+        {
+          $set: {
+            isCompleted: true,
+            completedAt,
+          },
+        }
+      );
+      console.log(`Marked DOCUMENTS_SIGNED prerequisite completed for lease ${envelope.leaseId}`);
     }
   } catch (error) {
     console.error("Error updating lease documents after signing:", error);

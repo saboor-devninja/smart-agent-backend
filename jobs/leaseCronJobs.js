@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const LeaseService = require("../api/v1/services/leaseService");
+const LeasePaymentRecord = require("../models/LeasePaymentRecord");
 
 const checkAndTerminateExpiredLeases = async () => {
   try {
@@ -27,6 +28,66 @@ const checkAndActivatePendingLeases = async () => {
   }
 };
 
+const generateUpcomingRentPayments = async () => {
+  try {
+    console.log("[CRON] Running generateUpcomingRentPayments...");
+
+    const now = new Date();
+    const threeDaysFromNow = new Date(now);
+    threeDaysFromNow.setDate(now.getDate() + 3);
+
+    const activeLeases = await LeaseService.getActiveLeasesForPayments(
+      now,
+      threeDaysFromNow
+    );
+
+    let createdCount = 0;
+
+    for (const lease of activeLeases) {
+      const dueDate = lease.nextDueDate;
+
+      const existing = await LeasePaymentRecord.findOne({
+        leaseId: lease._id,
+        type: "RENT",
+        dueDate,
+      });
+
+      if (existing) continue;
+
+      await LeasePaymentRecord.create({
+        leaseId: lease._id,
+        agentId: lease.agentId,
+        type: "RENT",
+        label: `Rent for ${dueDate.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        })}`,
+        dueDate,
+        amountDue: lease.rentAmount,
+        status: "PENDING",
+        amountPaid: null,
+        paidDate: null,
+        paymentMethod: null,
+        paymentReference: null,
+        invoiceUrl: null,
+        receiptUrl: null,
+        notes: null,
+        isFirstMonthRent: false,
+        isSecurityDeposit: false,
+        charges: [],
+      });
+
+      createdCount += 1;
+    }
+
+    console.log(
+      `[CRON] generateUpcomingRentPayments created ${createdCount} rent payment records.`
+    );
+  } catch (error) {
+    console.error("[CRON] Error in generateUpcomingRentPayments:", error);
+  }
+};
+
 const startLeaseCronJobs = () => {
   console.log("[CRON] Starting lease cron jobs...");
 
@@ -41,11 +102,18 @@ const startLeaseCronJobs = () => {
     timezone: "UTC",
   });
   console.log("[CRON] Scheduled checkAndActivatePendingLeases to run daily at midnight UTC");
+
+  cron.schedule("0 0 * * *", generateUpcomingRentPayments, {
+    scheduled: true,
+    timezone: "UTC",
+  });
+  console.log("[CRON] Scheduled generateUpcomingRentPayments to run daily at midnight UTC");
 };
 
 module.exports = {
   startLeaseCronJobs,
   checkAndTerminateExpiredLeases,
   checkAndActivatePendingLeases,
+  generateUpcomingRentPayments,
 };
 

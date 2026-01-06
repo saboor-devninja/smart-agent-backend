@@ -4,7 +4,6 @@ const config = require("./config/config");
 
 const PORT = config.port || 5000;
 
-
 // MongoDB Connection
 mongoose
   .connect(config.mongodb.uri)
