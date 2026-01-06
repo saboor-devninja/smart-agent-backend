@@ -66,6 +66,9 @@ const docuSignEnvelopeSchema = new mongoose.Schema(
     completedAt: Date,
     voidedAt: Date,
     voidedReason: String,
+    signedDocumentUrl: String,
+    statusChangedAt: Date,
+    lastWebhookAt: Date,
   },
   {
     timestamps: true,
@@ -73,7 +76,6 @@ const docuSignEnvelopeSchema = new mongoose.Schema(
   }
 );
 
-docuSignEnvelopeSchema.index({ envelopeId: 1 }, { unique: true });
 docuSignEnvelopeSchema.index({ leaseId: 1 });
 docuSignEnvelopeSchema.index({ agentId: 1 });
 docuSignEnvelopeSchema.index({ status: 1 });

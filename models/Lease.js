@@ -118,7 +118,7 @@ const leaseSchema = new mongoose.Schema(
     },
     signedAt: {
       type: Date,
-      required: true,
+      default: null,
     },
     witnessName: String,
     notes: String,

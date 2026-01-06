@@ -106,6 +106,10 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/v1', v1Routes);
 
+// Webhook Routes (no auth required, uses HMAC verification)
+const webhookRoutes = require('./api/webhooks/routes');
+app.use('/api/webhooks', webhookRoutes);
+
 // 404 handler
 app.all('*', (req, res, next) => {
   next(new AppError(`Route ${req.originalUrl} not found`, 404));

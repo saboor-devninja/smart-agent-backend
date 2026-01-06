@@ -3,9 +3,12 @@ const Property = require("../../../models/Property");
 const Tenant = require("../../../models/Tenant");
 const Landlord = require("../../../models/Landlord");
 const TenantService = require("./tenantService");
+const DocuSignEnvelope = require("../../../models/DocuSignEnvelope");
+const LeaseDocument = require("../../../models/LeaseDocument");
 const AppError = require("../../../utils/appError");
 const { formatDateForStorage } = require("../../../utils/dateUtils");
 const LeaseReturnDTO = require("../../../dtos/return/LeaseDTO");
+const { uploadBufferToS3 } = require("../../../utils/s3");
 
 async function generateLeaseNumber() {
   const currentYear = new Date().getFullYear();
@@ -32,9 +35,6 @@ function calculateEndDate(startDate, durationInMonths) {
   endDate.setMonth(endDate.getMonth() + durationInMonths);
   return endDate;
 }
-
-const LeaseDocument = require("../../../models/LeaseDocument");
-const { uploadBufferToS3 } = require("../../../utils/s3");
 
 class LeaseService {
   static async createLease(data, agentId, agencyId, files = {}) {
@@ -92,11 +92,22 @@ class LeaseService {
       throw new AppError('Either tenantId or tenant information (firstName, lastName) is required', 400);
     }
 
-    if (property.landlordId !== data.landlordId) {
+    // Ensure landlordId comes from the property to avoid mismatches
+    const propertyLandlordId = property.landlordId?.toString() || property.landlordId;
+    const requestedLandlordId = data.landlordId?.toString() || data.landlordId;
+
+    if (!propertyLandlordId) {
+      throw new AppError('Property is not linked to a landlord', 400);
+    }
+
+    // If no landlordId was sent from the client, derive it from the property
+    const landlordIdToUse = requestedLandlordId || propertyLandlordId;
+
+    if (propertyLandlordId !== landlordIdToUse) {
       throw new AppError('Landlord ID does not match property', 400);
     }
 
-    const landlord = await Landlord.findById(data.landlordId);
+    const landlord = await Landlord.findById(landlordIdToUse);
     if (!landlord) {
       throw new AppError('Landlord not found', 404);
     }
@@ -137,11 +148,14 @@ class LeaseService {
       throw new AppError('Leases must be created as DRAFT. Use the activate endpoint to activate a lease after it is ready.', 400);
     }
 
+    // Ensure the landlordId used for the lease matches the property landlord
+    data.landlordId = landlordIdToUse;
+
     const leaseData = {
       propertyId: data.propertyId,
       tenantId: tenant._id,
       agentId: agentId,
-      landlordId: data.landlordId,
+      landlordId: landlordIdToUse,
       agencyId: agencyId || null,
       leaseNumber: leaseNumber,
       rentAmount: data.rentAmount,
@@ -162,7 +176,7 @@ class LeaseService {
       renewalNotice: data.renewalNotice || 30,
       terminationNotice: data.terminationNotice || 30,
       earlyTerminationFee: data.earlyTerminationFee || null,
-      signedAt: data.signedAt ? formatDateForStorage(data.signedAt) : new Date(),
+      signedAt: data.signedAt ? formatDateForStorage(data.signedAt) : null,
       witnessName: data.witnessName || null,
       notes: data.notes || null,
       platformCommissionOverride: data.platformCommissionOverride || false,
@@ -331,7 +345,16 @@ class LeaseService {
       throw new AppError("Lease not found", 404);
     }
 
-    return LeaseReturnDTO.setDTO(lease);
+    const documents = await LeaseDocument.find({ leaseId: lease._id }).lean();
+    const docusignEnvelopes = await DocuSignEnvelope.find({ leaseId: lease._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const leaseDTO = LeaseReturnDTO.setDTO(lease);
+    leaseDTO.documents = documents;
+    leaseDTO.docusignEnvelopes = docusignEnvelopes;
+
+    return leaseDTO;
   }
 
   static async updateLease(id, data, agentId, agencyId) {

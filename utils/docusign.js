@@ -245,7 +245,7 @@ async function createRecipientViewUrl(params) {
       const signerRoutingOrder = parseInt(signer.routingOrder);
       if (signerRoutingOrder < currentRoutingOrder && signer.status !== "completed") {
         throw new Error(
-          `Previous signer '${signer.name}' must complete signing first (routing order ${signer.routingOrder})`
+          `Previous signer '${signer.name}' must complete signing first (routing order ${signerRoutingOrder})`
         );
       }
     }
@@ -281,6 +281,50 @@ async function createRecipientViewUrl(params) {
   return json.url;
 }
 
+async function downloadCombinedDocument(envelopeId) {
+  const { accessToken, accountId, baseUri } = await getBaseUriAndAccountId();
+  const response = await fetch(
+    `${baseUri}/v2.1/accounts/${accountId}/envelopes/${envelopeId}/documents/combined`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`downloadCombinedDocument failed: ${response.status} ${await response.text()}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+function verifyDocusignHmac(rawBody, signatureB64) {
+  const hmacKey = config.docusign.connectHmacKey;
+  
+  if (!hmacKey) {
+    console.warn("⚠️  DS_CONNECT_HMAC_KEY not configured - skipping HMAC verification");
+    return true;
+  }
+
+  if (!signatureB64) {
+    console.error("❌ No HMAC signature provided by DocuSign");
+    return false;
+  }
+
+  const digest = crypto.createHmac("sha256", hmacKey).update(rawBody).digest("base64");
+
+  try {
+    const isValid = crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signatureB64));
+    if (!isValid) {
+      console.error("❌ HMAC signature verification failed");
+    } else {
+      console.log("✅ HMAC signature verification successful");
+    }
+    return isValid;
+  } catch (error) {
+    console.error("HMAC verification error:", error);
+    return false;
+  }
+}
+
 module.exports = {
   getJwtAccessToken,
   getUserInfo,
@@ -288,5 +332,6 @@ module.exports = {
   createEnvelopeFromDocument,
   getEnvelopeRecipients,
   createRecipientViewUrl,
+  downloadCombinedDocument,
+  verifyDocusignHmac,
 };
-

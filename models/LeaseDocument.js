@@ -57,6 +57,8 @@ const leaseDocumentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    signedAt: Date,
+    signedDocumentUrl: String,
   },
   {
     timestamps: true,

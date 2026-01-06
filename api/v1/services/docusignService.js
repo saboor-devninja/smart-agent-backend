@@ -58,11 +58,10 @@ class DocuSignService {
     const primaryDocument = documents[0];
     let fileBase64;
 
-    if (primaryDocument.buffer) {
+    if (primaryDocument.file && primaryDocument.file.buffer) {
+      fileBase64 = primaryDocument.file.buffer.toString("base64");
+    } else if (primaryDocument.buffer) {
       fileBase64 = primaryDocument.buffer.toString("base64");
-    } else if (primaryDocument.file) {
-      const buffer = Buffer.from(await primaryDocument.file.arrayBuffer());
-      fileBase64 = buffer.toString("base64");
     } else {
       throw new AppError("Document file is required", 400);
     }
@@ -113,27 +112,18 @@ class DocuSignService {
       });
 
       const leaseDocuments = await Promise.all(
-        documents.map(async (doc, index) => {
-          let fileUrl;
-          if (index === 0) {
-            fileUrl = await uploadBufferToS3(
-              Buffer.from(await doc.file.arrayBuffer()),
-              `docusign-documents/${leaseId}/${Date.now()}-${doc.file.name}`,
-              doc.file.type || "application/pdf"
-            );
-          } else {
-            const buffer = doc.buffer || Buffer.from(await doc.file.arrayBuffer());
-            fileUrl = await uploadBufferToS3(
-              buffer,
-              `docusign-documents/${leaseId}/${Date.now()}-${doc.file.name}`,
-              doc.file.type || "application/pdf"
-            );
-          }
+        documents.map(async (doc) => {
+          const buffer = doc.file.buffer || Buffer.from(doc.file);
+          const fileUrl = await uploadBufferToS3(
+            buffer,
+            `docusign-documents/${leaseId}/${Date.now()}-${doc.file.name || doc.name || "document"}`,
+            doc.file.type || "application/pdf"
+          );
 
           return LeaseDocument.create({
             leaseId: leaseId,
             agentId: agentId,
-            documentName: doc.name || doc.file.name,
+            documentName: doc.name || doc.file.name || "document",
             documentType: doc.type || "lease_agreement",
             fileUrl: fileUrl,
             fileSize: doc.file.size || null,
@@ -160,18 +150,18 @@ class DocuSignService {
   }
 
   static async getSigningUrl(envelopeId, recipientRole, agentId, agencyId) {
-    const envelope = await DocuSignEnvelope.findOne({
+    let envelope = await DocuSignEnvelope.findOne({
       envelopeId: envelopeId,
       agentId: agentId,
     }).lean();
 
     if (!envelope) {
       if (agencyId) {
-        const agencyEnvelope = await DocuSignEnvelope.findOne({
+        envelope = await DocuSignEnvelope.findOne({
           envelopeId: envelopeId,
           agencyId: agencyId,
         }).lean();
-        if (!agencyEnvelope) {
+        if (!envelope) {
           throw new AppError("Envelope not found", 404);
         }
       } else {

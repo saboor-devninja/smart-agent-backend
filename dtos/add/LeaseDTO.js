@@ -203,8 +203,6 @@ class LeaseDTO {
       } else {
         validatedData.signedAt = signedAt;
       }
-    } else {
-      validatedData.signedAt = new Date();
     }
 
     if (data.witnessName) {
