@@ -96,7 +96,11 @@ class LeasePaymentService {
       const agent = await User.findById(agentId).lean();
 
       if (property && tenant && landlord && agent) {
-        const invoiceUrl = await generateInvoicePDF(record, lease, property, tenant, landlord, agent);
+        const currencySettings = {
+          currencySymbol: agent.currencySymbol || "$",
+          currencyLocale: agent.currencyLocale || "en-US",
+        };
+        const invoiceUrl = await generateInvoicePDF(record, lease, property, tenant, landlord, agent, currencySettings);
         record.invoiceUrl = invoiceUrl;
         await record.save();
       }
@@ -168,7 +172,11 @@ class LeasePaymentService {
         const agent = await User.findById(agentId).lean();
 
         if (property && tenant && landlord && agent) {
-          const receiptUrl = await generateReceiptPDF(record, lease, property, tenant, landlord, agent);
+          const currencySettings = {
+            currencySymbol: agent.currencySymbol || "$",
+            currencyLocale: agent.currencyLocale || "en-US",
+          };
+          const receiptUrl = await generateReceiptPDF(record, lease, property, tenant, landlord, agent, currencySettings);
           record.receiptUrl = receiptUrl;
           await record.save();
         }

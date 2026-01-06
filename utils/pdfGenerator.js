@@ -1,7 +1,13 @@
 const PDFDocument = require("pdfkit");
 const { uploadBufferToS3 } = require("./s3");
 
-async function generateInvoicePDF(record, lease, property, tenant, landlord, agent) {
+function formatCurrency(amount, currencySymbol = "$", currencyLocale = "en-US") {
+  return `${currencySymbol}${Number(amount).toFixed(2)}`;
+}
+
+async function generateInvoicePDF(record, lease, property, tenant, landlord, agent, currencySettings = {}) {
+  const currencySymbol = currencySettings.currencySymbol || "$";
+  const currencyLocale = currencySettings.currencyLocale || "en-US";
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ margin: 50, size: "LETTER" });
@@ -78,7 +84,7 @@ async function generateInvoicePDF(record, lease, property, tenant, landlord, age
       currentY += 5;
       doc.text(record.label || "Payment", 50, currentY);
       const baseAmount = Number(record.amountDue || 0);
-      doc.text(`$${baseAmount.toFixed(2)}`, 450, currentY, { align: "right" });
+      doc.text(formatCurrency(baseAmount, currencySymbol, currencyLocale), 450, currentY, { align: "right" });
       currentY += itemHeight;
 
       // Additional charges
@@ -87,7 +93,7 @@ async function generateInvoicePDF(record, lease, property, tenant, landlord, age
           if (charge.label && charge.amount) {
             doc.text(charge.label, 50, currentY);
             const chargeAmount = Number(charge.amount || 0);
-            doc.text(`$${chargeAmount.toFixed(2)}`, 450, currentY, { align: "right" });
+            doc.text(formatCurrency(chargeAmount, currencySymbol, currencyLocale), 450, currentY, { align: "right" });
             currentY += itemHeight;
           }
         });
@@ -103,7 +109,7 @@ async function generateInvoicePDF(record, lease, property, tenant, landlord, age
         : 0;
       const totalAmount = baseAmount + totalCharges;
       doc.text("TOTAL", 50, currentY);
-      doc.text(`$${totalAmount.toFixed(2)}`, 450, currentY, { align: "right" });
+      doc.text(formatCurrency(totalAmount, currencySymbol, currencyLocale), 450, currentY, { align: "right" });
       currentY += itemHeight;
 
       // Status
@@ -128,7 +134,9 @@ async function generateInvoicePDF(record, lease, property, tenant, landlord, age
   });
 }
 
-async function generateReceiptPDF(record, lease, property, tenant, landlord, agent) {
+async function generateReceiptPDF(record, lease, property, tenant, landlord, agent, currencySettings = {}) {
+  const currencySymbol = currencySettings.currencySymbol || "$";
+  const currencyLocale = currencySettings.currencyLocale || "en-US";
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ margin: 50, size: "LETTER" });
@@ -187,7 +195,7 @@ async function generateReceiptPDF(record, lease, property, tenant, landlord, age
       // Amount Paid
       doc.fontSize(14).font("Helvetica-Bold");
       const amountPaid = Number(record.amountPaid || 0);
-      doc.text(`Amount Paid: $${amountPaid.toFixed(2)}`, 50, doc.y, { align: "left" });
+      doc.text(`Amount Paid: ${formatCurrency(amountPaid, currencySymbol, currencyLocale)}`, 50, doc.y, { align: "left" });
       doc.moveDown(1);
 
       // Notes

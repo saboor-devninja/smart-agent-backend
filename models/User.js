@@ -30,6 +30,49 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Last name is required'],
       trim: true,
     },
+    phone: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    city: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    country: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    profilePicture: {
+      type: String,
+      default: null,
+    },
+    companyName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    companyRegistration: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    companyAddress: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    companyWebsite: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    companyLogo: {
+      type: String,
+      default: null,
+    },
     role: {
       type: String,
       enum: ['PLATFORM_ADMIN', 'AGENCY_ADMIN', 'MODERATOR', 'AGENT'],

@@ -5,6 +5,15 @@ class UserDTO {
     newUser.email = user.email;
     newUser.firstName = user.firstName;
     newUser.lastName = user.lastName;
+    newUser.phone = user.phone || null;
+    newUser.city = user.city || null;
+    newUser.country = user.country || null;
+    newUser.profilePicture = user.profilePicture || null;
+    newUser.companyName = user.companyName || null;
+    newUser.companyRegistration = user.companyRegistration || null;
+    newUser.companyAddress = user.companyAddress || null;
+    newUser.companyWebsite = user.companyWebsite || null;
+    newUser.companyLogo = user.companyLogo || null;
     newUser.role = user.role;
     newUser.agencyId = user.agencyId || null;
     newUser.isIndependent = user.isIndependent || false;
@@ -13,6 +22,8 @@ class UserDTO {
     newUser.currencyLocale = user.currencyLocale || "en-US";
     newUser.emailVerified = user.emailVerified || false;
     newUser.isActive = user.isActive !== undefined ? user.isActive : true;
+    newUser.createdAt = user.createdAt;
+    newUser.updatedAt = user.updatedAt;
     return newUser;
   }
 
