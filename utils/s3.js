@@ -136,6 +136,36 @@ function generateTenantProfilePath(tenantId) {
   return `tenants/${tenantId}/profile/profile-pic`;
 }
 
+async function uploadBufferToS3(buffer, key, contentType, bucket) {
+  try {
+    const s3 = getS3Client();
+    const bucketName = bucket || getBucketName();
+    const cdnUrl = getCDNUrl();
+
+    const uploadCommand = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType || "application/pdf",
+      CacheControl: "public, max-age=3600",
+      Metadata: {
+        uploadedAt: new Date().toISOString(),
+      },
+    });
+
+    await s3.send(uploadCommand);
+
+    const publicUrl = cdnUrl
+      ? `${cdnUrl}/${key}`
+      : `https://${bucketName}.s3.${config.s3.region}.amazonaws.com/${key}`;
+
+    return publicUrl;
+  } catch (error) {
+    console.error("S3 buffer upload error:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to upload buffer to S3");
+  }
+}
+
 module.exports = {
   uploadFile,
   deleteFile,
@@ -143,5 +173,6 @@ module.exports = {
   generateUserProfilePath,
   generateTenantProfilePath,
   generatePropertyMediaPath,
+  uploadBufferToS3,
 };
 
