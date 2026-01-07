@@ -232,6 +232,7 @@ class LeasePaymentService {
       await Promise.all(updates);
     }
   }
+
 }
 
 module.exports = LeasePaymentService;
