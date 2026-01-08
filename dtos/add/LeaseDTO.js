@@ -197,11 +197,17 @@ class LeaseDTO {
     }
 
     if (data.signedAt) {
-      const signedAt = new Date(data.signedAt);
-      if (isNaN(signedAt.getTime())) {
-        errors.push('Invalid signed at date');
+      // Keep as string to let formatDateForStorage handle UTC conversion
+      if (typeof data.signedAt === 'string') {
+        validatedData.signedAt = data.signedAt;
+      } else if (data.signedAt instanceof Date) {
+        // If already a Date, convert to string first
+        const year = data.signedAt.getUTCFullYear();
+        const month = String(data.signedAt.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(data.signedAt.getUTCDate()).padStart(2, '0');
+        validatedData.signedAt = `${year}-${month}-${day}`;
       } else {
-        validatedData.signedAt = signedAt;
+        errors.push('Invalid signed at date');
       }
     }
 
@@ -214,14 +220,18 @@ class LeaseDTO {
     }
 
     if (data.endDate) {
-      const endDate = new Date(data.endDate);
-      if (isNaN(endDate.getTime())) {
-        errors.push('Invalid end date');
-      } else {
-        validatedData.endDate = endDate;
-        if (validatedData.startDate && endDate <= validatedData.startDate) {
-          errors.push('End date must be after start date');
+      // Keep as string to let formatDateForStorage handle UTC conversion
+      if (typeof data.endDate === 'string') {
+        validatedData.endDate = data.endDate;
+        if (validatedData.startDate) {
+          const startDate = new Date(validatedData.startDate);
+          const endDate = new Date(data.endDate);
+          if (endDate <= startDate) {
+            errors.push('End date must be after start date');
+          }
         }
+      } else {
+        errors.push('Invalid end date');
       }
     }
 
@@ -349,11 +359,17 @@ class LeaseDTO {
     }
 
     if (data.startDate !== undefined) {
-      const startDate = new Date(data.startDate);
-      if (isNaN(startDate.getTime())) {
-        errors.push('Invalid start date');
+      // Keep as string to let formatDateForStorage handle UTC conversion
+      if (typeof data.startDate === 'string') {
+        validatedData.startDate = data.startDate;
+      } else if (data.startDate instanceof Date) {
+        // If already a Date, convert to string first
+        const year = data.startDate.getUTCFullYear();
+        const month = String(data.startDate.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(data.startDate.getUTCDate()).padStart(2, '0');
+        validatedData.startDate = `${year}-${month}-${day}`;
       } else {
-        validatedData.startDate = startDate;
+        errors.push('Invalid start date');
       }
     }
 
@@ -385,16 +401,18 @@ class LeaseDTO {
 
     if (data.endDate !== undefined) {
       if (data.endDate) {
-        const endDate = new Date(data.endDate);
-        if (isNaN(endDate.getTime())) {
-          errors.push('Invalid end date');
-        } else {
-          validatedData.endDate = endDate;
+        // Keep as string to let formatDateForStorage handle UTC conversion
+        if (typeof data.endDate === 'string') {
+          validatedData.endDate = data.endDate;
           if (validatedData.startDate) {
-            if (endDate <= validatedData.startDate) {
+            const startDate = new Date(validatedData.startDate);
+            const endDate = new Date(data.endDate);
+            if (endDate <= startDate) {
               errors.push('End date must be after start date');
             }
           }
+        } else {
+          errors.push('Invalid end date');
         }
       } else {
         validatedData.endDate = null;
@@ -485,11 +503,17 @@ class LeaseDTO {
 
     if (data.signedAt !== undefined) {
       if (data.signedAt) {
-        const signedAt = new Date(data.signedAt);
-        if (isNaN(signedAt.getTime())) {
-          errors.push('Invalid signed at date');
+        // Keep as string to let formatDateForStorage handle UTC conversion
+        if (typeof data.signedAt === 'string') {
+          validatedData.signedAt = data.signedAt;
+        } else if (data.signedAt instanceof Date) {
+          // If already a Date, convert to string first
+          const year = data.signedAt.getUTCFullYear();
+          const month = String(data.signedAt.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(data.signedAt.getUTCDate()).padStart(2, '0');
+          validatedData.signedAt = `${year}-${month}-${day}`;
         } else {
-          validatedData.signedAt = signedAt;
+          errors.push('Invalid signed at date');
         }
       } else {
         validatedData.signedAt = null;

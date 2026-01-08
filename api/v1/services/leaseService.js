@@ -2,6 +2,7 @@ const Lease = require("../../../models/Lease");
 const Property = require("../../../models/Property");
 const Tenant = require("../../../models/Tenant");
 const Landlord = require("../../../models/Landlord");
+const LeasePaymentRecord = require("../../../models/LeasePaymentRecord");
 const TenantService = require("./tenantService");
 const DocuSignEnvelope = require("../../../models/DocuSignEnvelope");
 const LeaseDocument = require("../../../models/LeaseDocument");
@@ -508,6 +509,7 @@ class LeaseService {
   }
 
   static async updatePropertyAvailability(propertyId) {
+    // Issue 11: Always update property availability based on lease status
     const activeOrPendingLeases = await Lease.countDocuments({
       propertyId,
       status: { $in: ['ACTIVE', 'PENDING_START'] }
@@ -515,7 +517,7 @@ class LeaseService {
 
     await Property.findByIdAndUpdate(propertyId, {
       isAvailable: activeOrPendingLeases === 0
-    });
+    }, { runValidators: false });
   }
 
   static async moveToPendingStart(id, agentId, agencyId) {
@@ -641,6 +643,13 @@ class LeaseService {
     }
 
     await lease.save();
+    
+    // Issue 10: Cancel all pending payments when lease is terminated
+    await LeasePaymentRecord.updateMany(
+      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID"] } },
+      { status: "CANCELLED" }
+    );
+    
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)
@@ -673,8 +682,13 @@ class LeaseService {
     }
 
     lease.status = 'CANCELLED';
-
     await lease.save();
+    
+    // Issue 10: Cancel all pending payments when lease is cancelled
+    await LeasePaymentRecord.updateMany(
+      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID"] } },
+      { status: "CANCELLED" }
+    );
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)

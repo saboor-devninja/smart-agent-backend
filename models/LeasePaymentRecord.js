@@ -83,6 +83,16 @@ const leasePaymentRecordSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    commissionRecordId: {
+      type: String,
+      ref: "CommissionRecord",
+      default: null,
+    },
+    landlordPaymentId: {
+      type: String,
+      ref: "LandlordPayment",
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -92,6 +102,8 @@ const leasePaymentRecordSchema = new mongoose.Schema(
 
 leasePaymentRecordSchema.index({ leaseId: 1, dueDate: 1 });
 leasePaymentRecordSchema.index({ leaseId: 1, status: 1 });
+leasePaymentRecordSchema.index({ commissionRecordId: 1 });
+leasePaymentRecordSchema.index({ landlordPaymentId: 1 });
 
 module.exports = mongoose.model("LeasePaymentRecord", leasePaymentRecordSchema);
 

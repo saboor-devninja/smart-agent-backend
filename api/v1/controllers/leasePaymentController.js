@@ -76,3 +76,24 @@ exports.update = tryCatchAsync(async (req, res, next) => {
   );
 });
 
+exports.getByIdWithRelated = tryCatchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return next(new AppError("Payment record id is required", badRequest));
+  }
+
+  const result = await LeasePaymentService.getByIdWithRelated(
+    id,
+    req.user._id,
+    req.user.agencyId || null
+  );
+
+  return apiResponse.successResponse(
+    res,
+    result,
+    "Payment record with related records retrieved successfully",
+    success
+  );
+});
+

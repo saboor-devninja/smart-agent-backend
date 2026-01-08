@@ -48,6 +48,7 @@ router.patch(
     agentIdField: 'agentId',
     agencyIdField: 'agencyId',
   }),
+  upload.fields(uploadFields),
   updateLease
 );
 

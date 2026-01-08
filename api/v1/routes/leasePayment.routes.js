@@ -4,6 +4,7 @@ const {
   getByLease,
   create,
   update,
+  getByIdWithRelated,
 } = require("../controllers/leasePaymentController");
 
 const router = express.Router();
@@ -11,6 +12,7 @@ const router = express.Router();
 router.use(isLoggedIn);
 
 router.get("/", getByLease);
+router.get("/:id/related", getByIdWithRelated);
 router.post("/", create);
 router.patch("/:id", update);
 
