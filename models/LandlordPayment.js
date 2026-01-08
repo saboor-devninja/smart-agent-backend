@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const landlordPaymentSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     commissionRecordId: {
       type: String,
@@ -77,10 +82,23 @@ const landlordPaymentSchema = new mongoose.Schema(
   }
 );
 
+landlordPaymentSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "landlord_payment_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 landlordPaymentSchema.index({ landlordId: 1, status: 1 });
 landlordPaymentSchema.index({ leaseId: 1 });
 landlordPaymentSchema.index({ paymentRecordId: 1 });
 landlordPaymentSchema.index({ commissionRecordId: 1 });
+landlordPaymentSchema.index({ docNumber: 1 });
 
 module.exports = mongoose.model("LandlordPayment", landlordPaymentSchema);
 

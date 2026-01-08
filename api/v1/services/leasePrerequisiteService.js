@@ -88,6 +88,7 @@ class LeasePrerequisiteService {
       isRequired: true,
       isCompleted: false,
       priority: 1,
+      amount: lease.rentAmount || null,
     });
 
     docs.push({
@@ -99,6 +100,7 @@ class LeasePrerequisiteService {
       isRequired: true,
       isCompleted: false,
       priority: 2,
+      amount: lease.securityDeposit || null,
     });
 
     docs.push({
@@ -113,6 +115,48 @@ class LeasePrerequisiteService {
     });
 
     await LeasePrerequisite.insertMany(docs);
+  }
+
+  static async revalidateAmountsForLease(leaseId, rentAmount, securityDeposit) {
+    const updates = [];
+
+    if (rentAmount !== undefined) {
+      updates.push(
+        LeasePrerequisite.updateMany(
+          {
+            leaseId,
+            type: "FIRST_MONTH_RENT_PAID",
+            isCompleted: false,
+          },
+          {
+            $set: {
+              amount: rentAmount || null,
+            },
+          }
+        )
+      );
+    }
+
+    if (securityDeposit !== undefined) {
+      updates.push(
+        LeasePrerequisite.updateMany(
+          {
+            leaseId,
+            type: "SECURITY_DEPOSIT_PAID",
+            isCompleted: false,
+          },
+          {
+            $set: {
+              amount: securityDeposit || null,
+            },
+          }
+        )
+      );
+    }
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
   }
 }
 

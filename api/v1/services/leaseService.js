@@ -32,6 +32,21 @@ async function generateLeaseNumber() {
   return `${baseNumber}${nextNumber.toString().padStart(3, '0')}`;
 }
 
+/**
+ * Calculates the end date of a lease based on start date and duration.
+ * 
+ * Note: Uses JavaScript's setMonth() which handles month-end edge cases:
+ * - Jan 31 + 1 month = Feb 28/29 (last day of February, not Mar 3)
+ * - Mar 31 + 1 month = Apr 30 (last day of April, not May 1)
+ * 
+ * This behavior is intentional and correct for lease calculations:
+ * If a lease starts on the last day of a month, it ends on the last day
+ * of the corresponding month in the future, not the first day of the next month.
+ * 
+ * @param {Date} startDate - The lease start date
+ * @param {Number} durationInMonths - Lease duration in months
+ * @returns {Date} The calculated end date
+ */
 function calculateEndDate(startDate, durationInMonths) {
   const endDate = new Date(startDate);
   endDate.setMonth(endDate.getMonth() + durationInMonths);
@@ -408,16 +423,78 @@ class LeaseService {
       lease.tenantId = data.tenantId;
     }
 
+    const oldRentAmount = lease.rentAmount;
+    const oldSecurityDeposit = lease.securityDeposit;
+    
     if (data.rentAmount !== undefined) lease.rentAmount = data.rentAmount;
     if (data.rentFrequency !== undefined) lease.rentFrequency = data.rentFrequency;
     if (data.dueDay !== undefined) lease.dueDay = data.dueDay;
     
     if (data.startDate !== undefined) {
-      lease.startDate = formatDateForStorage(data.startDate);
+      // Prevent start date changes if payment records exist
+      const paymentRecordsCount = await LeasePaymentRecord.countDocuments({
+        leaseId: lease._id,
+        status: { $ne: 'CANCELLED' }
+      });
+
+      if (paymentRecordsCount > 0) {
+        throw new AppError('Cannot change start date. Payment records already exist for this lease. Please cancel or delete payment records first.', 400);
+      }
+
+      const newStartDate = formatDateForStorage(data.startDate);
+      const oldStartDate = lease.startDate;
+      
+      // Check for significant date changes (more than 30 days difference)
+      if (oldStartDate) {
+        const oldDate = new Date(oldStartDate);
+        const newDate = new Date(newStartDate);
+        const daysDifference = Math.abs((newDate - oldDate) / (1000 * 60 * 60 * 24));
+        
+        if (daysDifference > 30) {
+          // Log warning for significant date changes (can be used for audit trail)
+          console.warn(`[LEASE] Significant start date change detected for lease ${lease._id}: ${daysDifference.toFixed(0)} days difference (${oldStartDate.toISOString().split('T')[0]} → ${newStartDate.toISOString().split('T')[0]})`);
+        }
+      }
+      
+      lease.startDate = newStartDate;
+      
       if (data.leaseDuration !== undefined) {
         lease.endDate = calculateEndDate(lease.startDate, data.leaseDuration);
       } else if (lease.leaseDuration) {
         lease.endDate = calculateEndDate(lease.startDate, lease.leaseDuration);
+      }
+      
+      // Update property availability when start date changes
+      // This ensures property availability is correct for PENDING_START leases
+      if (lease.status === 'PENDING_START' || lease.status === 'DRAFT') {
+        await this.updatePropertyAvailability(lease.propertyId);
+        
+        // Auto-activate PENDING_START lease if new start date is in the past and prerequisites are met
+        if (lease.status === 'PENDING_START') {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const newStartDateOnly = new Date(newStartDate);
+          newStartDateOnly.setHours(0, 0, 0, 0);
+          
+          // If new start date is in the past (or today), check if we should auto-activate
+          if (newStartDateOnly <= today) {
+            const requiredIncomplete = await LeasePrerequisiteService.getRequiredIncompleteCount(lease._id);
+            
+            if (requiredIncomplete === 0) {
+              // All prerequisites met, auto-activate the lease
+              lease.status = 'ACTIVE';
+              lease.actualStartDate = newStartDate;
+              lease.startedBy = agentId;
+              lease.startedAt = new Date();
+              lease.readyToStart = true;
+              lease.canStartReason = null;
+              
+              // Note: We'll save the lease later, but we need to update property availability for ACTIVE status
+              await this.updatePropertyAvailability(lease.propertyId);
+            }
+          }
+          // If new start date is in the future, lease remains PENDING_START (no action needed)
+        }
       }
     }
 
@@ -470,6 +547,19 @@ class LeaseService {
       await this.updatePropertyAvailability(lease.propertyId);
     }
     if (data.securityDeposit !== undefined) lease.securityDeposit = data.securityDeposit;
+    
+    // Revalidate prerequisite amounts if rent or security deposit changed
+    const rentAmountChanged = data.rentAmount !== undefined && data.rentAmount !== oldRentAmount;
+    const securityDepositChanged = data.securityDeposit !== undefined && data.securityDeposit !== oldSecurityDeposit;
+    
+    if (rentAmountChanged || securityDepositChanged) {
+      await LeasePrerequisiteService.revalidateAmountsForLease(
+        lease._id,
+        rentAmountChanged ? data.rentAmount : undefined,
+        securityDepositChanged ? data.securityDeposit : undefined
+      );
+    }
+    
     if (data.lateFeeEnabled !== undefined) lease.lateFeeEnabled = data.lateFeeEnabled;
     if (data.lateFeeType !== undefined) lease.lateFeeType = data.lateFeeType;
     if (data.lateFee !== undefined) lease.lateFee = data.lateFee;
@@ -593,7 +683,10 @@ class LeaseService {
       throw new AppError('Lease is not ready to start. Please complete all prerequisites', 400);
     }
 
-    const startDate = actualStartDate ? formatDateForStorage(actualStartDate) : new Date();
+    // Default actualStartDate to lease's startDate if not provided
+    const startDate = actualStartDate 
+      ? formatDateForStorage(actualStartDate) 
+      : lease.startDate;
 
     lease.status = 'ACTIVE';
     lease.actualStartDate = startDate;

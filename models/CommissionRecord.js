@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const commissionRecordSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     paymentRecordId: {
       type: String,
@@ -106,10 +111,23 @@ const commissionRecordSchema = new mongoose.Schema(
   }
 );
 
+commissionRecordSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "commission_record_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 commissionRecordSchema.index({ agentId: 1, status: 1 });
 commissionRecordSchema.index({ agencyId: 1, status: 1 });
 commissionRecordSchema.index({ leaseId: 1 });
 commissionRecordSchema.index({ paymentRecordId: 1 });
+commissionRecordSchema.index({ docNumber: 1 });
 
 module.exports = mongoose.model("CommissionRecord", commissionRecordSchema);
 

@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const leaseDocumentSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     leaseId: {
       type: String,
@@ -66,9 +71,22 @@ const leaseDocumentSchema = new mongoose.Schema(
   }
 );
 
+leaseDocumentSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "lease_document_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 leaseDocumentSchema.index({ leaseId: 1 });
 leaseDocumentSchema.index({ agentId: 1 });
 leaseDocumentSchema.index({ docusignEnvelopeId: 1 });
+leaseDocumentSchema.index({ docNumber: 1 });
 
 module.exports = mongoose.model("LeaseDocument", leaseDocumentSchema);
 

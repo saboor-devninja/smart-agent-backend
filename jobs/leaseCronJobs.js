@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const LeaseService = require("../api/v1/services/leaseService");
 const LeasePaymentRecord = require("../models/LeasePaymentRecord");
+const Lease = require("../models/Lease");
 
 const checkAndTerminateExpiredLeases = async () => {
   try {
@@ -42,46 +43,83 @@ const generateUpcomingRentPayments = async () => {
     );
 
     let createdCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     for (const lease of activeLeases) {
-      const dueDate = lease.nextDueDate;
+      try {
+        // Edge case: Verify lease is still ACTIVE (might have been terminated/cancelled since query)
+        const currentLease = await Lease.findById(lease._id).lean();
+        
+        if (!currentLease || currentLease.status !== 'ACTIVE') {
+          skippedCount++;
+          continue;
+        }
 
-      const existing = await LeasePaymentRecord.findOne({
-        leaseId: lease._id,
-        type: "RENT",
-        dueDate,
-      });
+        // Edge case: Verify lease hasn't expired
+        if (currentLease.endDate && new Date(currentLease.endDate) < now) {
+          skippedCount++;
+          continue;
+        }
 
-      if (existing) continue;
+        const dueDate = lease.nextDueDate;
 
-      await LeasePaymentRecord.create({
-        leaseId: lease._id,
-        agentId: lease.agentId,
-        type: "RENT",
-        label: `Rent for ${dueDate.toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        })}`,
-        dueDate,
-        amountDue: lease.rentAmount,
-        status: "PENDING",
-        amountPaid: null,
-        paidDate: null,
-        paymentMethod: null,
-        paymentReference: null,
-        invoiceUrl: null,
-        receiptUrl: null,
-        notes: null,
-        isFirstMonthRent: false,
-        isSecurityDeposit: false,
-        charges: [],
-      });
+        // Edge case: Check for existing payment with same due date (prevent duplicates)
+        const existing = await LeasePaymentRecord.findOne({
+          leaseId: lease._id,
+          type: "RENT",
+          dueDate,
+          status: { $ne: 'CANCELLED' },
+        });
 
-      createdCount += 1;
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        // Edge case: Verify due date is within lease period
+        if (currentLease.startDate && new Date(dueDate) < new Date(currentLease.startDate)) {
+          skippedCount++;
+          continue;
+        }
+        
+        if (currentLease.endDate && new Date(dueDate) > new Date(currentLease.endDate)) {
+          skippedCount++;
+          continue;
+        }
+
+        await LeasePaymentRecord.create({
+          leaseId: lease._id,
+          agentId: lease.agentId,
+          type: "RENT",
+          label: `Rent for ${dueDate.toLocaleDateString("en-US", {
+            month: "short",
+            year: "numeric",
+          })}`,
+          dueDate,
+          amountDue: lease.rentAmount,
+          status: "PENDING",
+          amountPaid: null,
+          paidDate: null,
+          paymentMethod: null,
+          paymentReference: null,
+          invoiceUrl: null,
+          receiptUrl: null,
+          notes: null,
+          isFirstMonthRent: false,
+          isSecurityDeposit: false,
+          charges: [],
+        });
+
+        createdCount += 1;
+      } catch (error) {
+        errorCount++;
+        console.error(`[CRON] Error processing lease ${lease._id}:`, error.message);
+      }
     }
 
     console.log(
-      `[CRON] generateUpcomingRentPayments created ${createdCount} rent payment records.`
+      `[CRON] generateUpcomingRentPayments: Created ${createdCount}, Skipped ${skippedCount}, Errors ${errorCount}`
     );
   } catch (error) {
     console.error("[CRON] Error in generateUpcomingRentPayments:", error);
