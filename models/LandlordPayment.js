@@ -98,7 +98,7 @@ landlordPaymentSchema.index({ landlordId: 1, status: 1 });
 landlordPaymentSchema.index({ leaseId: 1 });
 landlordPaymentSchema.index({ paymentRecordId: 1 });
 landlordPaymentSchema.index({ commissionRecordId: 1 });
-landlordPaymentSchema.index({ docNumber: 1 });
+// docNumber index is automatically created by unique: true
 
 module.exports = mongoose.model("LandlordPayment", landlordPaymentSchema);
 

@@ -86,7 +86,7 @@ leaseDocumentSchema.pre("save", async function (next) {
 leaseDocumentSchema.index({ leaseId: 1 });
 leaseDocumentSchema.index({ agentId: 1 });
 leaseDocumentSchema.index({ docusignEnvelopeId: 1 });
-leaseDocumentSchema.index({ docNumber: 1 });
+// docNumber index is automatically created by unique: true
 
 module.exports = mongoose.model("LeaseDocument", leaseDocumentSchema);
 

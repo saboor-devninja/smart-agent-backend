@@ -10,7 +10,7 @@ const leasePaymentRoutes = require("./leasePayment.routes");
 const docusignRoutes = require("./docusign.routes");
 const notificationPreferenceRoutes = require("./notificationPreference.routes");
 const commissionRoutes = require("./commission.routes");
-// const financeRoutes = require("./finance.routes");
+const financeRoutes = require("./finance.routes");
 // const notificationRoutes = require("./notification.routes");
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.use("/lease-prerequisites", leasePrerequisiteRoutes);
 router.use("/lease-payments", leasePaymentRoutes);
 router.use("/notification-preferences", notificationPreferenceRoutes);
 router.use("/commissions", commissionRoutes);
-// router.use("/finance", financeRoutes);
+router.use("/finance", financeRoutes);
 // router.use("/notifications", notificationRoutes);
 
 module.exports = router;

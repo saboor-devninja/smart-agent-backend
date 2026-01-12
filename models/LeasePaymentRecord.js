@@ -80,6 +80,14 @@ const leasePaymentRecordSchema = new mongoose.Schema(
         {
           label: String,
           amount: mongoose.Schema.Types.Decimal128,
+          description: {
+            type: String,
+            default: null,
+          },
+          utilityType: {
+            type: String,
+            default: null,
+          },
         },
       ],
       default: [],

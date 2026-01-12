@@ -13,7 +13,7 @@ const autoIncrementSchema = new Schema({
   },
 });
 
-autoIncrementSchema.index({ name: 1 });
+// name index is automatically created by unique: true
 
 module.exports = mongoose.model("AutoIncrement", autoIncrementSchema);
 

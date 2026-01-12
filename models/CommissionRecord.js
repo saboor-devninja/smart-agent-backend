@@ -127,7 +127,7 @@ commissionRecordSchema.index({ agentId: 1, status: 1 });
 commissionRecordSchema.index({ agencyId: 1, status: 1 });
 commissionRecordSchema.index({ leaseId: 1 });
 commissionRecordSchema.index({ paymentRecordId: 1 });
-commissionRecordSchema.index({ docNumber: 1 });
+// docNumber index is automatically created by unique: true
 
 module.exports = mongoose.model("CommissionRecord", commissionRecordSchema);
 

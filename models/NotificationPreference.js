@@ -51,7 +51,7 @@ const notificationPreferenceSchema = new mongoose.Schema(
   }
 );
 
-notificationPreferenceSchema.index({ userId: 1 }, { unique: true });
+// userId index is automatically created by unique: true in the schema
 
 const NotificationPreference = mongoose.model(
   "NotificationPreference",

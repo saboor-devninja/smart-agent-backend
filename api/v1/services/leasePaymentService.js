@@ -131,6 +131,8 @@ class LeasePaymentService {
         ? data.charges.map((c) => ({
             label: c.label,
             amount: c.amount,
+            description: c.description || null,
+            utilityType: c.utilityType || null,
           }))
         : [],
       invoiceUrl: null,
@@ -223,6 +225,8 @@ class LeasePaymentService {
       record.charges = data.charges.map((c) => ({
         label: c.label,
         amount: c.amount,
+        description: c.description || null,
+        utilityType: c.utilityType || null,
       }));
     }
 
