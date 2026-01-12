@@ -36,9 +36,13 @@ exports.login = tryCatchAsync(async (req, res, next) => {
 
   const { user, token } = await AuthService.login(validation.data.email, validation.data.password);
 
+  if (!user || !token) {
+    return next(new AppError("Login failed: missing user or token", 500));
+  }
+
   const responseData = UserDTO.setDTOWithToken(user, token);
 
-  apiResponse.successResponse(
+  return apiResponse.successResponse(
     res,
     responseData,
     "Login successful",

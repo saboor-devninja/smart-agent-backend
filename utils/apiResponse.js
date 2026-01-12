@@ -33,6 +33,6 @@ exports.errorResponse = (err, res) => {
 };
 
 exports.successResponse = (res, data, message, code) => {
-  res.status(code).json({ code, data, message, status: "Success" });
+  return res.status(code).json({ code, data, message, status: "Success" });
 };
 
