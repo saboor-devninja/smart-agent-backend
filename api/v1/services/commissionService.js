@@ -420,6 +420,15 @@ class CommissionService {
       if (landlordPayment.status === "CANCELLED" && paymentRecord.status === "PAID") {
         landlordPayment.status = "PENDING";
         landlordPayment.paidAt = null;
+        landlordPayment.paymentMethod = null;
+        landlordPayment.paymentReference = null;
+      }
+      
+      // Ensure status is PENDING when payment is PAID (unless already set to PAID/PROCESSED)
+      if (paymentRecord.status === "PAID" && 
+          landlordPayment.status !== "PAID" && 
+          landlordPayment.status !== "PROCESSED") {
+        landlordPayment.status = "PENDING";
       }
       
       await landlordPayment.save();
@@ -539,6 +548,47 @@ class CommissionService {
       .populate("leaseId", "leaseNumber startDate endDate")
       .populate("propertyId", "title address")
       .populate("paymentRecordId", "label type dueDate")
+      .populate("agentId", "firstName lastName email")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return commissions.map((c) => ({
+      ...c,
+      paymentAmount: Number(c.paymentAmount || 0),
+      agentGrossCommission: Number(c.agentGrossCommission || 0),
+      agentPlatformFee: Number(c.agentPlatformFee || 0),
+      agentNetCommission: Number(c.agentNetCommission || 0),
+      agencyGrossCommission: Number(c.agencyGrossCommission || 0),
+      agencyPlatformFee: Number(c.agencyPlatformFee || 0),
+      agencyNetCommission: Number(c.agencyNetCommission || 0),
+      platformCommission: Number(c.platformCommission || 0),
+      landlordNetAmount: Number(c.landlordNetAmount || 0),
+    }));
+  }
+
+  /**
+   * Get all commissions for platform admin (no agent/agency restriction)
+   */
+  static async getAllCommissions(filters = {}) {
+    const query = {};
+
+    if (filters.status) {
+      query.status = filters.status;
+    }
+    if (filters.leaseId) {
+      query.leaseId = filters.leaseId;
+    }
+    if (filters.startDate || filters.endDate) {
+      query.createdAt = {};
+      if (filters.startDate) query.createdAt.$gte = new Date(filters.startDate);
+      if (filters.endDate) query.createdAt.$lte = new Date(filters.endDate);
+    }
+
+    const commissions = await CommissionRecord.find(query)
+      .populate("leaseId", "leaseNumber startDate endDate")
+      .populate("propertyId", "title address")
+      .populate("paymentRecordId", "label type dueDate")
+      .populate("agentId", "firstName lastName email")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -589,6 +639,49 @@ class CommissionService {
           }))
         : [],
     }));
+  }
+
+  /**
+   * Update landlord payment status and payment details
+   */
+  static async updateLandlordPayment(landlordPaymentId, data, agentId) {
+    const landlordPayment = await LandlordPayment.findById(landlordPaymentId);
+    if (!landlordPayment) {
+      throw new AppError("Landlord payment not found", 404);
+    }
+
+    // Verify ownership
+    if (landlordPayment.agentId !== agentId) {
+      throw new AppError("Unauthorized: You can only update your own landlord payments", 403);
+    }
+
+    // Update fields
+    if (data.status !== undefined) {
+      landlordPayment.status = data.status;
+    }
+    if (data.paymentMethod !== undefined) {
+      landlordPayment.paymentMethod = data.paymentMethod || null;
+    }
+    if (data.paymentReference !== undefined) {
+      landlordPayment.paymentReference = data.paymentReference || null;
+    }
+    if (data.notes !== undefined) {
+      landlordPayment.notes = data.notes || null;
+    }
+
+    // Update paidAt when status changes to PAID
+    if (data.status === "PAID" && !landlordPayment.paidAt) {
+      landlordPayment.paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
+    } else if (data.status !== "PAID" && data.status !== undefined) {
+      // Clear paidAt if status is not PAID
+      landlordPayment.paidAt = null;
+    } else if (data.paidAt !== undefined) {
+      landlordPayment.paidAt = data.paidAt ? new Date(data.paidAt) : null;
+    }
+
+    await landlordPayment.save();
+
+    return landlordPayment.toObject();
   }
 }
 

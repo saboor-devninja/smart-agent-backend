@@ -1,33 +1,20 @@
 const express = require("express");
-const authRoutes = require("./auth.routes");
-const propertyRoutes = require("./property.routes");
-const landlordRoutes = require("./landlord.routes");
-const tenantRoutes = require("./tenant.routes");
-const leaseRoutes = require("./lease.routes");
-const uploadRoutes = require("./upload.routes");
-const leasePrerequisiteRoutes = require("./leasePrerequisite.routes");
-const leasePaymentRoutes = require("./leasePayment.routes");
-const docusignRoutes = require("./docusign.routes");
-const notificationPreferenceRoutes = require("./notificationPreference.routes");
-const commissionRoutes = require("./commission.routes");
-const financeRoutes = require("./finance.routes");
-// const notificationRoutes = require("./notification.routes");
+
+// Role-based route aggregators
+const sharedRoutes = require("./shared");
+const agentRoutes = require("./agent");
+const adminRoutes = require("./admin");
 
 const router = express.Router();
 
-router.use("/auth", authRoutes);
-router.use("/properties", propertyRoutes);
-router.use("/landlords", landlordRoutes);
-router.use("/tenants", tenantRoutes);
-router.use("/leases", leaseRoutes);
-router.use("/upload", uploadRoutes);
-router.use("/leases/docusign", docusignRoutes);
-router.use("/lease-prerequisites", leasePrerequisiteRoutes);
-router.use("/lease-payments", leasePaymentRoutes);
-router.use("/notification-preferences", notificationPreferenceRoutes);
-router.use("/commissions", commissionRoutes);
-router.use("/finance", financeRoutes);
-// router.use("/notifications", notificationRoutes);
+// Shared routes (auth, etc.) - accessible by all
+router.use("/", sharedRoutes);
+
+// Agent routes - accessible by AGENT, AGENCY_ADMIN, and PLATFORM_ADMIN
+// These routes handle role-based filtering internally
+router.use("/agent", agentRoutes);
+
+// Admin routes - accessible by PLATFORM_ADMIN only
+router.use("/admin", adminRoutes);
 
 module.exports = router;
-

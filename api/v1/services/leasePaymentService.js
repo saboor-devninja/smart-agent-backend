@@ -164,6 +164,15 @@ class LeasePaymentService {
 
     await this._syncPrerequisitesForRecord(record);
 
+    // Create notification for rent due
+    try {
+      const { notifyRentDue } = require("../../../utils/notificationHelper");
+      await notifyRentDue(record._id, leaseId, agentId);
+    } catch (error) {
+      console.error("Error creating rent due notification:", error);
+      // Don't fail payment record creation if notification fails
+    }
+
     return record.toObject();
   }
 
@@ -277,6 +286,17 @@ class LeasePaymentService {
     } catch (error) {
       console.error("Error managing commissions:", error);
       // Don't fail the update if commission calculation fails
+    }
+
+    // Create notification for rent paid when status changes to PAID
+    if (!wasPaid && record.status === "PAID") {
+      try {
+        const { notifyRentPaid } = require("../../../utils/notificationHelper");
+        await notifyRentPaid(record._id, record.leaseId, agentId);
+      } catch (error) {
+        console.error("Error creating rent paid notification:", error);
+        // Don't fail payment update if notification fails
+      }
     }
 
     // Generate receipt PDF if status just became PAID

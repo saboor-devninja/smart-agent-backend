@@ -20,12 +20,10 @@ function initializeCronJobs() {
 
   try {
     const { startLeaseCronJobs } = require("../../jobs/leaseCronJobs");
-    startLeaseCronJobs();
+    const { startNotificationCronJobs } = require("../../jobs/notificationCronJobs");
     
-    // Other cron jobs will be added as we implement them
-    // initializeRentGenerationCron();
-    // initializeRentNotReceivedCron();
-    // initializeVacantPropertyCron();
+    startLeaseCronJobs();
+    startNotificationCronJobs();
     
     initialized = true;
     console.log('All cron jobs initialized successfully');

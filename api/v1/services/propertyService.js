@@ -65,6 +65,15 @@ class PropertyService {
 
     const property = await Property.create(propertyData);
 
+    // Create notification for property creation
+    try {
+      const { notifyPropertyCreated } = require("../../../utils/notificationHelper");
+      await notifyPropertyCreated(property._id, propertyAgentId);
+    } catch (error) {
+      console.error("Error creating property notification:", error);
+      // Don't fail property creation if notification fails
+    }
+
     // Create utilities
     if (utilities && utilities.length > 0) {
       const utilityData = utilities.map((utility) => ({

@@ -53,10 +53,13 @@ class TenantService {
   static async getTenants(agentId, agencyId, filters = {}) {
     const query = {};
 
-    if (agencyId) {
-      query.agencyId = agencyId;
-    } else {
-      query.agentId = agentId;
+    // For platform admin (agentId and agencyId are null), don't filter by agent/agency
+    if (agentId !== null && agencyId !== null) {
+      if (agencyId) {
+        query.agencyId = agencyId;
+      } else {
+        query.agentId = agentId;
+      }
     }
 
     if (filters.city) {

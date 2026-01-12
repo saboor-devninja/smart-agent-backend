@@ -289,6 +289,15 @@ class LeaseService {
       };
     }
 
+    // Create notification for lease creation
+    try {
+      const { notifyLeaseCreated } = require("../../../utils/notificationHelper");
+      await notifyLeaseCreated(lease._id, agentId);
+    } catch (error) {
+      console.error("Error creating lease notification:", error);
+      // Don't fail lease creation if notification fails
+    }
+
     return leaseDTO;
   }
 
@@ -704,6 +713,15 @@ class LeaseService {
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
       .lean();
+
+    // Create notification for lease activation
+    try {
+      const { notifyLeaseActivated } = require("../../../utils/notificationHelper");
+      await notifyLeaseActivated(lease._id, agentId);
+    } catch (error) {
+      console.error("Error creating lease activation notification:", error);
+      // Don't fail lease activation if notification fails
+    }
 
     return LeaseReturnDTO.setDTO(populatedLease);
   }

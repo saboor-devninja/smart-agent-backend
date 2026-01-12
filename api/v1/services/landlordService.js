@@ -84,6 +84,8 @@ class LandlordService {
     const totalCount = await Landlord.countDocuments(query);
 
     const landlords = await Landlord.find(query)
+      .populate("agentId", "firstName lastName email")
+      .populate("agencyId", "name")
       .sort({ createdAt: -1 })
       .limit(filters.limit || 100)
       .skip(filters.skip || 0);

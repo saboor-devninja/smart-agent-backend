@@ -231,6 +231,7 @@ class StatementService {
       const payments = await LandlordPayment.find(paymentQuery)
         .populate("leaseId", "leaseNumber startDate endDate")
         .populate("propertyId", "title address")
+        .populate("paymentRecordId", "label type")
         .sort({ createdAt: -1 })
         .lean();
 
