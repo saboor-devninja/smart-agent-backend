@@ -11,10 +11,10 @@ const notificationPreferenceRoutes = require("./notificationPreference.routes");
 const notificationRoutes = require("./notification.routes");
 const commissionRoutes = require("./commission.routes");
 const financeRoutes = require("./finance.routes");
+const emailRoutes = require("./email.routes");
 
 const router = express.Router();
 
-// Agent routes - accessible by AGENT, AGENCY_ADMIN, and PLATFORM_ADMIN
 router.use("/properties", propertyRoutes);
 router.use("/landlords", landlordRoutes);
 router.use("/tenants", tenantRoutes);
@@ -27,5 +27,6 @@ router.use("/notification-preferences", notificationPreferenceRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/commissions", commissionRoutes);
 router.use("/finance", financeRoutes);
+router.use("/emails", emailRoutes);
 
 module.exports = router;

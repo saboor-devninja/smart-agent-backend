@@ -269,6 +269,15 @@ class LeasePaymentService {
           // Update existing commission (handles amount changes and reactivation)
           await CommissionService.recalculateAndUpdate(record, agentId, agencyId);
         }
+
+        // Mark commission as PAID when tenant payment is fully paid
+        await CommissionRecord.updateOne(
+          { paymentRecordId: record._id },
+          {
+            status: "PAID",
+            paidAt: record.paidDate || new Date(),
+          }
+        );
       } else if (wasPaid && existingCommission) {
         // Payment was PAID but is now not PAID - cancel commissions
         // This handles: CANCELLED, PENDING, PARTIALLY_PAID, SENT

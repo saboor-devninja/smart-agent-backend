@@ -1,16 +1,8 @@
 const express = require("express");
 const multer = require("multer");
-const {
-  signup,
-  login,
-  getMe,
-  createPlatformAdminDev,
-  forgotPassword,
-  verifyPasswordResetOTP,
-  resetPassword,
-} = require("../../controllers/shared/authController");
-const { updateProfile, changePassword } = require("../../controllers/shared/userController");
-const { isLoggedIn } = require("../../middleware/auth");
+const { signup, login, getMe, createPlatformAdminDev } = require("../controllers/authController");
+const { updateProfile, changePassword } = require("../controllers/userController");
+const { isLoggedIn } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -24,10 +16,10 @@ const upload = multer({
 router.post("/signup", signup);
 router.post("/login", login);
 router.get("/me", isLoggedIn, getMe);
+
+// DEV-ONLY route to create initial PLATFORM_ADMIN user
+// IMPORTANT: Comment/remove this route before going live
 router.post("/create-platform-admin-dev", createPlatformAdminDev);
-router.post("/forgot-password", forgotPassword);
-router.post("/verify-password-reset-otp", verifyPasswordResetOTP);
-router.post("/reset-password", resetPassword);
 router.patch(
   "/profile",
   isLoggedIn,

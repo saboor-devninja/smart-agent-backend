@@ -1,4 +1,5 @@
 const AuthService = require("../../services/authService");
+const OtpService = require("../../services/otpService");
 const tryCatchAsync = require("../../../../utils/tryCatchAsync");
 const apiResponse = require("../../../../utils/apiResponse");
 const AppError = require("../../../../utils/appError");
@@ -63,17 +64,7 @@ exports.getMe = tryCatchAsync(async (req, res, next) => {
   );
 });
 
-/**
- * DEV/SETUP ONLY: Create initial PLATFORM_ADMIN user
- * 
- * Email: admin.dev@smartagent.digit
- * Password: test@123
- * 
- * This route is intentionally left unauthenticated so you can hit it once
- * in a fresh environment, then comment/remove it before going live.
- */
 exports.createPlatformAdminDev = tryCatchAsync(async (req, res, next) => {
-  // Check if a platform admin already exists
   const existingAdmin = await User.findOne({ role: "PLATFORM_ADMIN" }).lean();
   if (existingAdmin) {
     return next(new AppError("Platform admin already exists", badRequest));
@@ -103,5 +94,75 @@ exports.createPlatformAdminDev = tryCatchAsync(async (req, res, next) => {
     responseData,
     "Platform admin user created successfully (DEV route)",
     created
+  );
+});
+
+exports.forgotPassword = tryCatchAsync(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return next(new AppError("Email is required", badRequest));
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user) {
+    return apiResponse.successResponse(
+      res,
+      {},
+      "If an account exists with this email, a password reset code has been sent.",
+      success
+    );
+  }
+
+  try {
+    await OtpService.createAndSendOTP(email.toLowerCase(), "PASSWORD_RESET");
+    return apiResponse.successResponse(
+      res,
+      {},
+      "If an account exists with this email, a password reset code has been sent.",
+      success
+    );
+  } catch (error) {
+    return next(new AppError(error.message || "Failed to send password reset code", 500));
+  }
+});
+
+exports.verifyPasswordResetOTP = tryCatchAsync(async (req, res, next) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    return next(new AppError("Email and OTP are required", badRequest));
+  }
+
+  const result = await OtpService.verifyOTP(email.toLowerCase(), otp, "PASSWORD_RESET");
+
+  if (!result.success) {
+    return next(new AppError(result.message, badRequest));
+  }
+
+  return apiResponse.successResponse(res, {}, result.message, success);
+});
+
+exports.resetPassword = tryCatchAsync(async (req, res, next) => {
+  const { email, otp, password } = req.body;
+
+  if (!email || !otp || !password) {
+    return next(new AppError("Email, OTP, and password are required", badRequest));
+  }
+
+  if (password.length < 6) {
+    return next(new AppError("Password must be at least 6 characters long", badRequest));
+  }
+
+  const { user } = await AuthService.resetPassword(email.toLowerCase(), otp, password);
+
+  const userData = UserDTO.setDTO(user);
+
+  return apiResponse.successResponse(
+    res,
+    { user: userData },
+    "Password reset successfully! You can now login with your new password.",
+    success
   );
 });

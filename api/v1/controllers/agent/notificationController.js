@@ -155,21 +155,36 @@ exports.sseHandler = tryCatchAsync(async (req, res, next) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Verify token
+  // Verify token (verifyToken is synchronous, no need for await)
   let decoded;
   try {
-    decoded = await verifyToken(token);
+    decoded = verifyToken(token);
   } catch (error) {
     return res.status(401).json({ error: "Invalid token" });
   }
 
-  const userId = decoded._id || decoded.id;
+  // Token is signed with { userId, role }, so use decoded.userId
+  const userId = decoded.userId || decoded._id || decoded.id;
 
-  // Set SSE headers
+  if (!userId) {
+    return res.status(401).json({ error: "Invalid token: missing userId" });
+  }
+
+  // Set SSE headers (must be set before any writes)
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no"); // Disable Nginx buffering
+  
+  // CORS headers for SSE
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  
+  // Flush headers immediately
+  res.flushHeaders();
 
   // Send initial connection message
   res.write(`data: ${JSON.stringify({ type: "connected", timestamp: new Date() })}\n\n`);

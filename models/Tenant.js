@@ -45,6 +45,16 @@ const tenantSchema = new mongoose.Schema(
     emergencyContactPhone: String,
     emergencyContactRelationship: String,
     notes: String,
+    kycStatus: {
+      type: String,
+      enum: ["PENDING", "VERIFIED", "REJECTED"],
+      default: "PENDING",
+    },
+    kycVerifiedAt: Date,
+    kycVerifiedBy: {
+      type: String,
+      ref: "User",
+    },
   },
   {
     timestamps: true,

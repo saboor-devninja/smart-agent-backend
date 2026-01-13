@@ -168,10 +168,75 @@ class TenantService {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Calculate payment statistics
+    const LeasePaymentRecord = require("../../../models/LeasePaymentRecord");
+    const leaseIds = leasesWithProperties.map((l) => l._id);
+
+    const normalizeAmount = (v) => {
+      if (v === null || v === undefined) return 0;
+      if (typeof v === "number") return v;
+      if (typeof v === "string") {
+        const n = parseFloat(v);
+        return Number.isNaN(n) ? 0 : n;
+      }
+      return 0;
+    };
+
+    let totalPaid = 0;
+    let totalDue = 0;
+    let nextPayment = null;
+
+    if (leaseIds.length > 0) {
+      const allPayments = await LeasePaymentRecord.find({
+        leaseId: { $in: leaseIds },
+        type: "RENT",
+      })
+        .sort({ dueDate: 1 })
+        .lean();
+
+      // Calculate total paid (sum of amountPaid for PAID records)
+      const paidPayments = allPayments.filter((p) => p.status === "PAID");
+      totalPaid = paidPayments.reduce(
+        (sum, p) => sum + normalizeAmount(p.amountPaid || p.amountDue),
+        0
+      );
+
+      // Calculate total due (sum of amountDue for PENDING/PARTIALLY_PAID records)
+      const unpaidPayments = allPayments.filter(
+        (p) => p.status === "PENDING" || p.status === "PARTIALLY_PAID"
+      );
+      totalDue = unpaidPayments.reduce(
+        (sum, p) => sum + normalizeAmount(p.amountDue),
+        0
+      );
+
+      // Find next payment (earliest unpaid payment with dueDate >= today)
+      const now = new Date();
+      const upcomingPayments = allPayments.filter(
+        (p) =>
+          (p.status === "PENDING" || p.status === "PARTIALLY_PAID") &&
+          p.dueDate &&
+          new Date(p.dueDate) >= now
+      );
+
+      if (upcomingPayments.length > 0) {
+        const next = upcomingPayments[0];
+        nextPayment = {
+          amount: normalizeAmount(next.amountDue),
+          dueDate: next.dueDate ? new Date(next.dueDate) : null,
+        };
+      }
+    }
+
     const tenantWithRelations = {
       ...tenant,
       leases: leasesWithProperties,
       ratings: ratings,
+      paymentStats: {
+        totalPaid,
+        totalDue,
+        nextPayment,
+      },
     };
 
     return TenantReturnDTO.setDTO(tenantWithRelations);
@@ -211,6 +276,9 @@ class TenantService {
     if (data.emergencyContactPhone !== undefined) tenant.emergencyContactPhone = data.emergencyContactPhone || null;
     if (data.emergencyContactRelationship !== undefined) tenant.emergencyContactRelationship = data.emergencyContactRelationship || null;
     if (data.notes !== undefined) tenant.notes = data.notes || null;
+    if (data.kycStatus !== undefined) tenant.kycStatus = data.kycStatus;
+    if (data.kycVerifiedAt !== undefined) tenant.kycVerifiedAt = data.kycVerifiedAt ? formatDateForStorage(data.kycVerifiedAt) : null;
+    if (data.kycVerifiedBy !== undefined) tenant.kycVerifiedBy = data.kycVerifiedBy || null;
 
     if (profilePictureFile && profilePictureFile.size > 0) {
       const uploadPath = generateTenantProfilePath(tenant._id);
@@ -319,6 +387,32 @@ class TenantService {
         displayName: `${tenant.firstName} ${tenant.lastName}`.trim(),
       })),
     };
+  }
+
+  static async updateKycStatus(id, kycStatus, verifiedBy) {
+    const tenant = await Tenant.findById(id);
+
+    if (!tenant) {
+      throw new AppError("Tenant not found", 404);
+    }
+
+    tenant.kycStatus = kycStatus;
+    if (kycStatus === "VERIFIED") {
+      tenant.kycVerifiedAt = new Date();
+      tenant.kycVerifiedBy = verifiedBy;
+    } else {
+      tenant.kycVerifiedAt = null;
+      tenant.kycVerifiedBy = null;
+    }
+
+    await tenant.save();
+
+    const populatedTenant = await Tenant.findById(tenant._id)
+      .populate("agentId", "firstName lastName email")
+      .populate("kycVerifiedBy", "firstName lastName email")
+      .lean();
+
+    return TenantReturnDTO.setDTO(populatedTenant);
   }
 }
 

@@ -123,3 +123,19 @@ exports.getTenantsForSelect = tryCatchAsync(async (req, res, next) => {
   return apiResponse.successResponse(res, result, "Tenants retrieved successfully", success);
 });
 
+exports.updateKycStatus = tryCatchAsync(async (req, res, next) => {
+  const { kycStatus } = req.body;
+  const { id } = req.params;
+
+  if (!kycStatus || !["PENDING", "VERIFIED", "REJECTED"].includes(kycStatus)) {
+    return next(new AppError("Invalid KYC status", badRequest));
+  }
+
+  const tenant = await TenantService.updateKycStatus(
+    id,
+    kycStatus,
+    req.user._id
+  );
+
+  return apiResponse.successResponse(res, { tenant }, "KYC status updated successfully", success);
+});

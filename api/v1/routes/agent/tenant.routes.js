@@ -8,6 +8,7 @@ const {
   updateTenant,
   deleteTenant,
   getTenantsForSelect,
+  updateKycStatus,
 } = require("../../controllers/agent/tenantController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { restrictTo, checkResourceOwnership } = require("../../middleware/authorize");
@@ -37,6 +38,16 @@ router.get(
     agencyIdField: "agencyId",
   }),
   getTenant
+);
+
+router.patch(
+  "/:id/kyc-status",
+  checkResourceOwnership({
+    fetchResource: async (id) => await Tenant.findById(id),
+    agentIdField: "agentId",
+    agencyIdField: "agencyId",
+  }),
+  updateKycStatus
 );
 
 router.patch(

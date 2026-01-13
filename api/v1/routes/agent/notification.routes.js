@@ -6,7 +6,6 @@ const {
   markAsRead,
   markAllAsRead,
   archive,
-  sseHandler,
 } = require("../../controllers/agent/notificationController");
 const { isLoggedIn } = require("../../middleware/auth");
 
@@ -21,8 +20,5 @@ router.get("/stats", getStats);
 router.patch("/read", markAsRead);
 router.patch("/read-all", markAllAsRead);
 router.patch("/archive", archive);
-
-// SSE endpoint (handles auth in controller via token in query)
-router.get("/sse", sseHandler);
 
 module.exports = router;

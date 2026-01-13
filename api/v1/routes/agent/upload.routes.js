@@ -85,6 +85,15 @@ router.post("/", upload.single("file"), async (req, res) => {
         result = await uploadFile(req.file, userProfilePath);
         break;
 
+      case "generic":
+        // Generic file upload for attachments (emails, etc.)
+        // Sanitize filename to remove special characters
+        const sanitizedFilename = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+        // uploadFile expects path without extension, it will add the extension automatically
+        const genericPath = `uploads/generic/${Date.now()}-${sanitizedFilename.replace(/\.[^/.]+$/, "")}`;
+        result = await uploadFile(req.file, genericPath);
+        break;
+
       default:
         return res.status(400).json({ error: "Invalid upload type" });
     }

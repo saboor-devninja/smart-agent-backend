@@ -63,6 +63,33 @@ class TenantDTO {
       tenantData.averageRating = null;
     }
 
+    // Include KYC status
+    tenantData.kycStatus = tenant.kycStatus || "PENDING";
+    tenantData.kycVerifiedAt = tenant.kycVerifiedAt ? formatDateForResponse(tenant.kycVerifiedAt) : null;
+    tenantData.kycVerifiedBy = tenant.kycVerifiedBy || null;
+
+    // Include payment statistics
+    if (tenant.paymentStats) {
+      tenantData.paymentStats = {
+        totalPaid: tenant.paymentStats.totalPaid || 0,
+        totalDue: tenant.paymentStats.totalDue || 0,
+        nextPayment: tenant.paymentStats.nextPayment
+          ? {
+              amount: tenant.paymentStats.nextPayment.amount || 0,
+              dueDate: tenant.paymentStats.nextPayment.dueDate
+                ? formatDateForResponse(tenant.paymentStats.nextPayment.dueDate)
+                : null,
+            }
+          : null,
+      };
+    } else {
+      tenantData.paymentStats = {
+        totalPaid: 0,
+        totalDue: 0,
+        nextPayment: null,
+      };
+    }
+
     return tenantData;
   }
 
