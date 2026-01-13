@@ -141,6 +141,8 @@ leasePaymentRecordSchema.pre("save", async function (next) {
 
 leasePaymentRecordSchema.index({ leaseId: 1, dueDate: 1 });
 leasePaymentRecordSchema.index({ leaseId: 1, status: 1 });
+// Compound index for common query: agentId + type + status + dueDate
+leasePaymentRecordSchema.index({ agentId: 1, type: 1, status: 1, dueDate: 1 });
 leasePaymentRecordSchema.index({ commissionRecordId: 1 });
 leasePaymentRecordSchema.index({ landlordPaymentId: 1 });
 leasePaymentRecordSchema.index({ invoiceNumber: 1 });

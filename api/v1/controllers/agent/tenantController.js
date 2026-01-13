@@ -7,6 +7,7 @@ const TenantDTO = require("../../../../dtos/add/TenantDTO");
 const TenantReturnDTO = require("../../../../dtos/return/TenantDTO");
 const { parseNestedFormData } = require("../../../../utils/parseFormData");
 const { formatDateForStorage } = require("../../../../utils/dateUtils");
+const { validateObjectId } = require("../../../../utils/validateObjectId");
 
 exports.createTenant = tryCatchAsync(async (req, res, next) => {
   const parsedBody = parseNestedFormData(req.body);
@@ -124,17 +125,26 @@ exports.getTenantsForSelect = tryCatchAsync(async (req, res, next) => {
 });
 
 exports.updateKycStatus = tryCatchAsync(async (req, res, next) => {
-  const { kycStatus } = req.body;
+  const { kycStatus, checklist } = req.body;
   const { id } = req.params;
+
+  // Validate ObjectId
+  validateObjectId(id, "Tenant ID");
 
   if (!kycStatus || !["PENDING", "VERIFIED", "REJECTED"].includes(kycStatus)) {
     return next(new AppError("Invalid KYC status", badRequest));
   }
 
+  // If verifying, require checklist
+  if (kycStatus === "VERIFIED" && (!checklist || !Array.isArray(checklist) || checklist.length === 0)) {
+    return next(new AppError("KYC checklist is required for verification", badRequest));
+  }
+
   const tenant = await TenantService.updateKycStatus(
     id,
     kycStatus,
-    req.user._id
+    req.user._id,
+    checklist
   );
 
   return apiResponse.successResponse(res, { tenant }, "KYC status updated successfully", success);

@@ -112,7 +112,16 @@ class PropertyService {
         });
       });
 
-      await Promise.all(mediaPromises);
+      // Use Promise.allSettled to handle individual upload failures
+      const mediaResults = await Promise.allSettled(mediaPromises);
+      const failedUploads = mediaResults
+        .map((result, index) => ({ result, index }))
+        .filter(({ result }) => result.status === "rejected");
+      
+      if (failedUploads.length > 0) {
+        console.error(`Failed to upload ${failedUploads.length} media file(s)`);
+        // Continue with successful uploads
+      }
     }
 
     return property;
@@ -257,12 +266,18 @@ class PropertyService {
     const PropertyUtility = require("../../../models/PropertyUtility");
     const PropertyMedia = require("../../../models/PropertyMedia");
 
-    const landlord = await Landlord.findById(property.landlordId)
-      .select('_id firstName lastName organizationName isOrganization')
-      .lean();
+    // Add null check for landlordId before querying
+    if (property.landlordId) {
+      const landlord = await Landlord.findById(property.landlordId)
+        .select('_id firstName lastName organizationName isOrganization')
+        .lean();
 
-    if (landlord) {
-      property.landlordId = landlord;
+      if (landlord) {
+        property.landlordId = landlord;
+      } else {
+        // Landlord was deleted, set to null to prevent errors
+        property.landlordId = null;
+      }
     }
 
     const utilities = await PropertyUtility.find({ propertyId: property._id }).lean();
@@ -288,6 +303,8 @@ class PropertyService {
     let hasActiveLease = false;
     let hasPendingOrDraftLease = false;
     let activeOrPendingLeasesCount = 0;
+    
+    // Improved error handling for lease queries
     try {
       const Lease = require("../../../models/Lease");
       const Tenant = require("../../../models/Tenant");
@@ -484,7 +501,16 @@ class PropertyService {
         });
       });
 
-      await Promise.all(mediaPromises);
+      // Use Promise.allSettled to handle individual upload failures
+      const mediaResults = await Promise.allSettled(mediaPromises);
+      const failedUploads = mediaResults
+        .map((result, index) => ({ result, index }))
+        .filter(({ result }) => result.status === "rejected");
+      
+      if (failedUploads.length > 0) {
+        console.error(`Failed to upload ${failedUploads.length} media file(s)`);
+        // Continue with successful uploads
+      }
     }
 
     return updatedProperty;

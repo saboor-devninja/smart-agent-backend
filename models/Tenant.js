@@ -55,6 +55,22 @@ const tenantSchema = new mongoose.Schema(
       type: String,
       ref: "User",
     },
+    kycChecklist: {
+      type: [
+        {
+          item: {
+            type: String,
+            required: true,
+          },
+          verified: {
+            type: Boolean,
+            default: false,
+          },
+          verifiedAt: Date,
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

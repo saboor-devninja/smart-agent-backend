@@ -93,26 +93,41 @@ class TenantService {
 
     const TenantRating = require("../../../models/TenantRating");
 
-    const tenantsWithRelations = await Promise.all(
+    // Use Promise.allSettled to handle individual failures gracefully
+    const tenantsWithRelationsResults = await Promise.allSettled(
       tenants.map(async (tenant) => {
-        const activeLeases = await Lease.find({
-          tenantId: tenant._id,
-          status: "ACTIVE",
-        })
-          .select("_id status startDate endDate propertyId")
-          .lean();
+        try {
+          const activeLeases = await Lease.find({
+            tenantId: tenant._id,
+            status: "ACTIVE",
+          })
+            .select("_id status startDate endDate propertyId")
+            .lean();
 
-        const ratings = await TenantRating.find({ tenantId: tenant._id })
-          .populate("agentId", "firstName lastName")
-          .select("rating comment agentId")
-          .lean();
+          const ratings = await TenantRating.find({ tenantId: tenant._id })
+            .populate("agentId", "firstName lastName")
+            .select("rating comment agentId")
+            .lean();
 
-        return {
-          ...tenant,
-          leases: activeLeases,
-          ratings: ratings,
-        };
+          return {
+            ...tenant,
+            leases: activeLeases || [],
+            ratings: ratings || [],
+          };
+        } catch (error) {
+          // Log error but return tenant with empty arrays
+          console.error(`Error loading relations for tenant ${tenant._id}:`, error);
+          return {
+            ...tenant,
+            leases: [],
+            ratings: [],
+          };
+        }
       })
+    );
+
+    const tenantsWithRelations = tenantsWithRelationsResults.map((result) =>
+      result.status === "fulfilled" ? result.value : result.reason
     );
 
     return {
@@ -147,20 +162,31 @@ class TenantService {
       .select("_id status startDate endDate propertyId rentAmount")
       .lean();
 
-    const leasesWithProperties = await Promise.all(
-      leases.map(async (lease) => {
-        if (lease.propertyId) {
-          const property = await Property.findById(lease.propertyId)
-            .select("title address city")
-            .lean();
-          return {
-            ...lease,
-            propertyId: property,
-          };
-        }
-        return lease;
-      })
-    );
+    // Fix N+1 query: Batch fetch all properties at once
+    const propertyIds = leases
+      .map((lease) => lease.propertyId)
+      .filter((id) => id != null);
+    
+    const properties = propertyIds.length > 0
+      ? await Property.find({ _id: { $in: propertyIds } })
+          .select("_id title address city")
+          .lean()
+      : [];
+    
+    const propertyMap = new Map(properties.map((p) => [p._id, p]));
+    
+    const leasesWithProperties = leases.map((lease) => {
+      if (lease.propertyId && propertyMap.has(lease.propertyId)) {
+        return {
+          ...lease,
+          propertyId: propertyMap.get(lease.propertyId),
+        };
+      }
+      return {
+        ...lease,
+        propertyId: null,
+      };
+    });
 
     const ratings = await TenantRating.find({ tenantId: tenant._id })
       .populate("agentId", "firstName lastName")
@@ -389,7 +415,7 @@ class TenantService {
     };
   }
 
-  static async updateKycStatus(id, kycStatus, verifiedBy) {
+  static async updateKycStatus(id, kycStatus, verifiedBy, checklist = null) {
     const tenant = await Tenant.findById(id);
 
     if (!tenant) {
@@ -400,9 +426,21 @@ class TenantService {
     if (kycStatus === "VERIFIED") {
       tenant.kycVerifiedAt = new Date();
       tenant.kycVerifiedBy = verifiedBy;
+      // Store checklist items with verification timestamp
+      if (checklist && Array.isArray(checklist)) {
+        tenant.kycChecklist = checklist.map((item) => ({
+          item: item.item,
+          verified: item.verified || false,
+          verifiedAt: item.verified ? new Date() : null,
+        }));
+      }
     } else {
       tenant.kycVerifiedAt = null;
       tenant.kycVerifiedBy = null;
+      // Clear checklist when status is not VERIFIED
+      if (kycStatus === "PENDING") {
+        tenant.kycChecklist = [];
+      }
     }
 
     await tenant.save();

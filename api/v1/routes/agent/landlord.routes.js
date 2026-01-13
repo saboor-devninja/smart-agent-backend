@@ -11,6 +11,7 @@ const {
 } = require("../../controllers/agent/landlordController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { restrictTo, checkResourceOwnership } = require("../../middleware/authorize");
+const { validateParamId } = require("../../../../utils/validateObjectId");
 
 const router = express.Router();
 
@@ -35,6 +36,7 @@ router.get("/select", getLandlordsForSelect);
 // All authenticated users can view landlords (ownership checked in middleware)
 router.get(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Landlord.findById(id),
     agentIdField: 'agentId',
@@ -46,6 +48,7 @@ router.get(
 // All authenticated users can update landlords (ownership checked in middleware)
 router.patch(
   "/:id",
+  validateParamId,
   upload.single("profilePicture"),
   checkResourceOwnership({
     fetchResource: async (id) => await Landlord.findById(id),
@@ -58,6 +61,7 @@ router.patch(
 // All authenticated users can delete landlords (ownership checked in middleware)
 router.delete(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Landlord.findById(id),
     agentIdField: 'agentId',

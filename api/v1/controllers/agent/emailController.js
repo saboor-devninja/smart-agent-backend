@@ -11,12 +11,32 @@ exports.sendEmail = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("Recipients, subject, and body are required", badRequest));
   }
 
+  // Sanitize HTML content to prevent XSS
+  const xss = require("xss");
+  const sanitizedHtmlBody = htmlBody ? xss(htmlBody, {
+    whiteList: {
+      p: [],
+      br: [],
+      strong: [],
+      em: [],
+      u: [],
+      h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
+      ul: [], ol: [], li: [],
+      a: ["href", "title", "target"],
+      blockquote: [],
+      code: [],
+      pre: [],
+    },
+    stripIgnoreTag: true,
+    stripIgnoreTagBody: ["script"],
+  }) : null;
+
   const sentEmail = await EmailService.sendEmail(
     req.user._id,
     recipients,
     subject,
     body,
-    htmlBody,
+    sanitizedHtmlBody,
     attachments || [],
     {
       role: req.user.role,
@@ -138,6 +158,7 @@ exports.markEmailAsKyc = tryCatchAsync(async (req, res, next) => {
   }
 
   const SentEmail = require("../../../../models/SentEmail");
+  const Tenant = require("../../../../models/Tenant");
   const email = await SentEmail.findById(emailId);
 
   if (!email) {
@@ -147,6 +168,21 @@ exports.markEmailAsKyc = tryCatchAsync(async (req, res, next) => {
   // Verify the email belongs to the user or is an inbound email for this tenant
   if (email.senderId !== req.user._id && !email.isInbound) {
     return next(new AppError("Unauthorized", 403));
+  }
+
+  // Verify tenant belongs to the user/agency
+  const tenant = await Tenant.findById(tenantId).lean();
+  if (!tenant) {
+    return next(new AppError("Tenant not found", 404));
+  }
+
+  // Check tenant ownership
+  const isTenantOwner = 
+    (req.user.agencyId && tenant.agencyId === req.user.agencyId) ||
+    (!req.user.agencyId && tenant.agentId === req.user._id);
+
+  if (!isTenantOwner) {
+    return next(new AppError("Unauthorized: Tenant does not belong to you", 403));
   }
 
   email.isKyc = true;

@@ -103,6 +103,8 @@ const sentEmailSchema = new mongoose.Schema(
 );
 
 sentEmailSchema.index({ senderId: 1, createdAt: -1 });
+// Compound index for inbox queries: senderId + isKyc + tenantId
+sentEmailSchema.index({ senderId: 1, isKyc: 1, tenantId: 1 });
 sentEmailSchema.index({ tenantId: 1 });
 sentEmailSchema.index({ landlordId: 1 });
 sentEmailSchema.index({ status: 1 });

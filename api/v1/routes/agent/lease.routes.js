@@ -13,6 +13,7 @@ const {
 } = require("../../controllers/agent/leaseController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { checkResourceOwnership } = require("../../middleware/authorize");
+const { validateParamId } = require("../../../../utils/validateObjectId");
 const Lease = require("../../../../models/Lease");
 
 const router = express.Router();
@@ -33,6 +34,7 @@ router.get("/", getLeases);
 
 router.get(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -43,6 +45,7 @@ router.get(
 
 router.patch(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -54,6 +57,7 @@ router.patch(
 
 router.patch(
   "/:id/pending-start",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -64,6 +68,7 @@ router.patch(
 
 router.patch(
   "/:id/activate",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -74,6 +79,7 @@ router.patch(
 
 router.patch(
   "/:id/terminate",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -84,6 +90,7 @@ router.patch(
 
 router.patch(
   "/:id/cancel",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',
@@ -94,6 +101,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Lease.findById(id),
     agentIdField: 'agentId',

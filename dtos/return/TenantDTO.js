@@ -67,6 +67,7 @@ class TenantDTO {
     tenantData.kycStatus = tenant.kycStatus || "PENDING";
     tenantData.kycVerifiedAt = tenant.kycVerifiedAt ? formatDateForResponse(tenant.kycVerifiedAt) : null;
     tenantData.kycVerifiedBy = tenant.kycVerifiedBy || null;
+    tenantData.kycChecklist = tenant.kycChecklist || [];
 
     // Include payment statistics
     if (tenant.paymentStats) {

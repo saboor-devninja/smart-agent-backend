@@ -12,6 +12,7 @@ const {
 } = require("../../controllers/agent/tenantController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { restrictTo, checkResourceOwnership } = require("../../middleware/authorize");
+const { validateParamId } = require("../../../../utils/validateObjectId");
 
 const router = express.Router();
 
@@ -32,6 +33,7 @@ router.get("/select", getTenantsForSelect);
 
 router.get(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Tenant.findById(id),
     agentIdField: "agentId",
@@ -42,6 +44,7 @@ router.get(
 
 router.patch(
   "/:id/kyc-status",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Tenant.findById(id),
     agentIdField: "agentId",
@@ -52,6 +55,7 @@ router.patch(
 
 router.patch(
   "/:id",
+  validateParamId,
   upload.single("profilePicture"),
   checkResourceOwnership({
     fetchResource: async (id) => await Tenant.findById(id),
@@ -63,6 +67,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Tenant.findById(id),
     agentIdField: "agentId",

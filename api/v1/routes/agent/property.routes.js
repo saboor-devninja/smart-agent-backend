@@ -9,7 +9,8 @@ const {
   deleteProperty 
 } = require("../../controllers/agent/propertyController");
 const { isLoggedIn } = require("../../middleware/auth");
-const { restrictTo, checkResourceOwnership } = require("../../middleware/authorize");
+const { checkResourceOwnership } = require("../../middleware/authorize");
+const { validateParamId } = require("../../../../utils/validateObjectId");
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ router.get("/", getProperties);
 // All authenticated users can view properties (ownership checked in middleware)
 router.get(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Property.findById(id),
     agentIdField: 'agentId',
@@ -42,6 +44,7 @@ router.get(
 // All authenticated users can update properties (ownership checked in middleware)
 router.patch(
   "/:id",
+  validateParamId,
   upload.array("mediaFiles", 10),
   checkResourceOwnership({
     fetchResource: async (id) => await Property.findById(id),
@@ -54,6 +57,7 @@ router.patch(
 // All authenticated users can delete properties (ownership checked in middleware)
 router.delete(
   "/:id",
+  validateParamId,
   checkResourceOwnership({
     fetchResource: async (id) => await Property.findById(id),
     agentIdField: 'agentId',
