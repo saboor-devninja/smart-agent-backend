@@ -476,6 +476,228 @@ class LeasePaymentService {
     };
   }
 
+  /**
+   * Get all payment records across all leases with filters
+   * @param {string} agentId - Agent ID
+   * @param {string|null} agencyId - Agency ID (if agency admin)
+   * @param {Object} filters - Filter options
+   * @returns {Object} - Payment records with related data and summary
+   */
+  static async getAllPayments(agentId, agencyId, filters = {}) {
+    const {
+      propertyId,
+      tenantId,
+      landlordId,
+      status,
+      type,
+      dateFrom,
+      dateTo,
+      month,
+      year,
+      limit = 1000,
+      offset = 0,
+    } = filters;
+
+    // Build lease query based on agent/agency
+    const leaseQuery = agencyId
+      ? { agencyId }
+      : { agentId };
+
+    // Get all leases for this agent/agency
+    const leases = await Lease.find(leaseQuery)
+      .select("_id propertyId tenantId landlordId")
+      .lean();
+
+    const leaseIds = leases.map((l) => l._id);
+
+    if (leaseIds.length === 0) {
+      return {
+        records: [],
+        summary: {
+          total: 0,
+          collected: 0,
+          pending: 0,
+          overdue: 0,
+        },
+        filterOptions: {
+          properties: [],
+          tenants: [],
+          landlords: [],
+        },
+      };
+    }
+
+    // Build payment query
+    const paymentQuery = { leaseId: { $in: leaseIds } };
+
+    // Apply filters
+    if (status && status !== "all") {
+      paymentQuery.status = status;
+    }
+
+    if (type && type !== "all") {
+      paymentQuery.type = type;
+    }
+
+    if (dateFrom || dateTo) {
+      paymentQuery.dueDate = {};
+      if (dateFrom) {
+        paymentQuery.dueDate.$gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        paymentQuery.dueDate.$lte = new Date(dateTo);
+      }
+    }
+
+    if (month) {
+      paymentQuery.dueDate = paymentQuery.dueDate || {};
+      paymentQuery.dueDate.$gte = new Date(year || new Date().getFullYear(), month - 1, 1);
+      paymentQuery.dueDate.$lte = new Date(year || new Date().getFullYear(), month, 0, 23, 59, 59);
+    }
+
+    if (year && !month) {
+      paymentQuery.dueDate = paymentQuery.dueDate || {};
+      paymentQuery.dueDate.$gte = new Date(year, 0, 1);
+      paymentQuery.dueDate.$lte = new Date(year, 11, 31, 23, 59, 59);
+    }
+
+    // Get payment records
+    let records = await LeasePaymentRecord.find(paymentQuery)
+      .sort({ dueDate: -1, createdAt: -1 })
+      .limit(limit)
+      .skip(offset)
+      .lean();
+
+    // Filter by property, tenant, landlord if specified
+    if (propertyId || tenantId || landlordId) {
+      const filteredLeases = leases.filter((lease) => {
+        if (propertyId && lease.propertyId !== propertyId) return false;
+        if (tenantId && lease.tenantId !== tenantId) return false;
+        if (landlordId && lease.landlordId !== landlordId) return false;
+        return true;
+      });
+
+      const filteredLeaseIds = filteredLeases.map((l) => l._id);
+      records = records.filter((r) => filteredLeaseIds.includes(r.leaseId));
+    }
+
+    // Populate related data
+    const leaseMap = new Map(leases.map((l) => [l._id, l]));
+
+    // Get unique property, tenant, landlord IDs for filter options
+    const propertyIds = [...new Set(leases.map((l) => l.propertyId).filter(Boolean))];
+    const tenantIds = [...new Set(leases.map((l) => l.tenantId).filter(Boolean))];
+    const landlordIds = [...new Set(leases.map((l) => l.landlordId).filter(Boolean))];
+
+    const [properties, tenants, landlords] = await Promise.all([
+      Property.find({ _id: { $in: propertyIds } })
+        .select("_id title address city")
+        .lean(),
+      Tenant.find({ _id: { $in: tenantIds } })
+        .select("_id firstName lastName email")
+        .lean(),
+      Landlord.find({ _id: { $in: landlordIds } })
+        .select("_id contactPersonName email")
+        .lean(),
+    ]);
+
+    const propertyMap = new Map(properties.map((p) => [p._id, p]));
+    const tenantMap = new Map(tenants.map((t) => [t._id, t]));
+    const landlordMap = new Map(landlords.map((l) => [l._id, l]));
+
+    // Normalize Decimal128 amounts
+    const normalizeAmount = (v) => {
+      if (v === null || v === undefined) return null;
+      try {
+        if (typeof v === "number") return v;
+        if (typeof v === "string") return parseFloat(v);
+        if (typeof v === "object" && v !== null) {
+          if (typeof v.toString === "function") {
+            const n = parseFloat(v.toString());
+            return Number.isNaN(n) ? null : n;
+          }
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Enrich records with related data
+    const enrichedRecords = records.map((record) => {
+      const lease = leaseMap.get(record.leaseId);
+      const property = lease ? propertyMap.get(lease.propertyId) : null;
+      const tenant = lease ? tenantMap.get(lease.tenantId) : null;
+      const landlord = lease ? landlordMap.get(lease.landlordId) : null;
+
+      return {
+        ...record,
+        amountDue: normalizeAmount(record.amountDue),
+        amountPaid: normalizeAmount(record.amountPaid),
+        charges: Array.isArray(record.charges)
+          ? record.charges.map((c) => ({
+              ...c,
+              amount: normalizeAmount(c.amount),
+            }))
+          : [],
+        property: property || null,
+        tenant: tenant || null,
+        landlord: landlord || null,
+        lease: lease
+          ? {
+              _id: lease._id,
+              propertyId: lease.propertyId,
+              tenantId: lease.tenantId,
+              landlordId: lease.landlordId,
+            }
+          : null,
+      };
+    });
+
+    // Calculate summary
+    const allRecords = await LeasePaymentRecord.find({
+      leaseId: { $in: leaseIds },
+    }).lean();
+
+    const summary = {
+      total: allRecords.reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+      collected: allRecords
+        .filter((r) => r.status === "PAID")
+        .reduce((sum, r) => sum + (normalizeAmount(r.amountPaid) || 0), 0),
+      pending: allRecords
+        .filter((r) => r.status === "PENDING" || r.status === "SENT")
+        .reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+      overdue: allRecords
+        .filter((r) => {
+          const isOverdue =
+            (r.status === "PENDING" || r.status === "SENT") &&
+            r.dueDate &&
+            new Date(r.dueDate) < new Date();
+          return isOverdue;
+        })
+        .reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+    };
+
+    return {
+      records: enrichedRecords,
+      summary,
+      filterOptions: {
+        properties: properties.map((p) => ({
+          id: p._id,
+          title: p.title || p.address || "Property",
+        })),
+        tenants: tenants.map((t) => ({
+          id: t._id,
+          name: `${t.firstName || ""} ${t.lastName || ""}`.trim() || t.email || "Tenant",
+        })),
+        landlords: landlords.map((l) => ({
+          id: l._id,
+          name: l.contactPersonName || l.email || "Landlord",
+        })),
+      },
+    };
+  }
+
 }
 
 module.exports = LeasePaymentService;

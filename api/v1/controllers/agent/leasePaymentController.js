@@ -97,3 +97,46 @@ exports.getByIdWithRelated = tryCatchAsync(async (req, res, next) => {
   );
 });
 
+exports.getAll = tryCatchAsync(async (req, res, next) => {
+  const {
+    propertyId,
+    tenantId,
+    landlordId,
+    status,
+    type,
+    dateFrom,
+    dateTo,
+    month,
+    year,
+    limit,
+    offset,
+  } = req.query;
+
+  const filters = {
+    propertyId: propertyId || null,
+    tenantId: tenantId || null,
+    landlordId: landlordId || null,
+    status: status || "all",
+    type: type || "all",
+    dateFrom: dateFrom || null,
+    dateTo: dateTo || null,
+    month: month ? parseInt(month) : null,
+    year: year ? parseInt(year) : null,
+    limit: limit ? parseInt(limit) : 1000,
+    offset: offset ? parseInt(offset) : 0,
+  };
+
+  const result = await LeasePaymentService.getAllPayments(
+    req.user._id,
+    req.user.agencyId || null,
+    filters
+  );
+
+  return apiResponse.successResponse(
+    res,
+    result,
+    "Rent payments retrieved successfully",
+    success
+  );
+});
+

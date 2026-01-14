@@ -1,28 +1,60 @@
 const User = require("../../../models/User");
+const Agency = require("../../../models/Agency");
 const AppError = require("../../../utils/appError");
 const { signToken } = require("../../../utils/jwt");
+const mongoose = require("mongoose");
 
 class AuthService {
   static async signup(data) {
-    const { email, password, firstName, lastName, role, agencyId, isIndependent } = data;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      role,
+      agencyId,
+      isIndependent,
+      phone,
+      city,
+      country,
+      companyName,
+      companyRegistration,
+      companyAddress,
+      companyWebsite,
+      profilePicture,
+      companyLogo,
+    } = data;
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      throw new AppError('Email already exists', 400);
+      throw new AppError("Email already exists", 400);
     }
 
+    // Create user and mark email as verified (no OTP flow)
     const user = await User.create({
       email: email.toLowerCase(),
       password,
       firstName,
       lastName,
-      role: role || 'AGENT',
+      role: role || "AGENT",
       agencyId: agencyId || null,
       isIndependent: isIndependent || false,
+      phone: phone || null,
+      city: city || null,
+      country: country || null,
+      companyName: companyName || null,
+      companyRegistration: companyRegistration || null,
+      companyAddress: companyAddress || null,
+      companyWebsite: companyWebsite || null,
+      companyLogo: companyLogo || null,
+      profilePicture: profilePicture || null,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
     });
 
     user.password = undefined;
 
+    // Return token so user can log in immediately
     const token = signToken(user._id, user.role);
 
     return {
@@ -105,6 +137,102 @@ class AuthService {
     user.password = undefined;
 
     return { user, message: "Password reset successfully!" };
+  }
+
+  static async signupAgency(data) {
+    const {
+      agencyInfo,
+      agencyAdmin,
+      password,
+      profilePicture,
+      agencyLogo,
+    } = data;
+
+    // Check if agency email already exists
+    const existingAgency = await Agency.findOne({
+      email: agencyInfo.agencyEmail.toLowerCase(),
+    });
+
+    if (existingAgency) {
+      throw new AppError("An agency with this email already exists", 400);
+    }
+
+    // Check if admin user email already exists
+    const existingUser = await User.findOne({
+      email: agencyAdmin.email.toLowerCase(),
+    });
+
+    if (existingUser) {
+      throw new AppError("A user with this email already exists", 400);
+    }
+
+    // Create agency and admin user in a transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // 1. Create Agency
+      const agency = await Agency.create(
+        [
+          {
+            name: agencyInfo.agencyName,
+            email: agencyInfo.agencyEmail.toLowerCase(),
+            phone: agencyInfo.agencyPhone || null,
+            registrationNumber: agencyInfo.agencyRegistrationNumber || null,
+            address: agencyInfo.agencyAddress || null,
+            city: agencyInfo.agencyCity || null,
+            country: agencyInfo.agencyCountry || null,
+            postalCode: agencyInfo.agencyPostalCode || null,
+            website: agencyInfo.agencyWebsite || null,
+            logo: agencyLogo || null,
+            status: "ACTIVE",
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+          },
+        ],
+        { session }
+      );
+
+      const createdAgency = Array.isArray(agency) ? agency[0] : agency;
+
+      // 2. Create Agency Admin User linked to the agency
+      const user = await User.create(
+        [
+          {
+            firstName: agencyAdmin.firstName,
+            lastName: agencyAdmin.lastName,
+            email: agencyAdmin.email.toLowerCase(),
+            phone: agencyAdmin.phone,
+            city: agencyAdmin.city,
+            country: agencyAdmin.country,
+            password: password,
+            role: "AGENCY_ADMIN",
+            isIndependent: false,
+            agencyId: createdAgency._id,
+            profilePicture: profilePicture || null,
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+          },
+        ],
+        { session }
+      );
+
+      const createdUser = Array.isArray(user) ? user[0] : user;
+
+      await session.commitTransaction();
+      session.endSession();
+
+      createdUser.password = undefined;
+
+      return {
+        agency: createdAgency,
+        user: createdUser,
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
 }
 
