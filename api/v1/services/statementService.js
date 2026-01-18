@@ -1,8 +1,10 @@
 const LeasePaymentRecord = require("../../../models/LeasePaymentRecord");
 const LandlordPayment = require("../../../models/LandlordPayment");
+const CommissionRecord = require("../../../models/CommissionRecord");
 const Landlord = require("../../../models/Landlord");
 const Tenant = require("../../../models/Tenant");
 const Lease = require("../../../models/Lease");
+const Property = require("../../../models/Property");
 
 class StatementService {
   static async getCombinedStatements(agentId, filters = {}) {
@@ -392,6 +394,190 @@ class StatementService {
     }
 
     throw new Error("Invalid type. Must be LANDLORD or TENANT");
+  }
+
+  /**
+   * Get generic statement - aggregates all tenant payments, landlord payments, and commissions
+   * Shows all records in one consolidated view
+   */
+  static async getGenericStatement(agentId, filters = {}) {
+    const normalizeAmount = (v) => {
+      if (v === null || v === undefined) return 0;
+      if (typeof v === "number") return v;
+      if (typeof v === "string") {
+        const n = parseFloat(v);
+        return Number.isNaN(n) ? 0 : n;
+      }
+      if (typeof v === "object" && v !== null && typeof v.toString === "function") {
+        const n = parseFloat(v.toString());
+        return Number.isNaN(n) ? 0 : n;
+      }
+      return 0;
+    };
+
+    // Build date range query
+    const dateRangeQuery = {};
+    if (filters.startDate) {
+      dateRangeQuery.$gte = new Date(filters.startDate);
+    }
+    if (filters.endDate) {
+      dateRangeQuery.$lte = new Date(filters.endDate + "T23:59:59");
+    }
+
+    // Get all tenant payment records (invoices/receipts)
+    const tenantPaymentQuery = { agentId, type: "RENT" };
+    if (Object.keys(dateRangeQuery).length > 0) {
+      tenantPaymentQuery.dueDate = dateRangeQuery;
+    }
+    if (filters.status && filters.status !== "all") {
+      tenantPaymentQuery.status = filters.status;
+    }
+
+    const tenantPayments = await LeasePaymentRecord.find(tenantPaymentQuery)
+      .populate({
+        path: "leaseId",
+        select: "leaseNumber tenantId landlordId propertyId",
+        populate: [
+          { path: "tenantId", select: "firstName lastName email" },
+          { path: "landlordId", select: "firstName lastName isOrganization organizationName" },
+          { path: "propertyId", select: "title address" },
+        ],
+      })
+      .sort({ dueDate: -1, createdAt: -1 })
+      .lean();
+
+    // Get all landlord payments
+    const landlordPaymentQuery = { agentId };
+    if (Object.keys(dateRangeQuery).length > 0) {
+      landlordPaymentQuery.$or = [
+        { dueDate: dateRangeQuery },
+        { createdAt: dateRangeQuery },
+      ];
+    }
+    if (filters.status && filters.status !== "all") {
+      landlordPaymentQuery.status = filters.status;
+    }
+
+    const landlordPayments = await LandlordPayment.find(landlordPaymentQuery)
+      .populate("paymentRecordId", "_id")
+      .lean();
+
+    // Get all commission records
+    const commissionQuery = { agentId };
+    if (Object.keys(dateRangeQuery).length > 0) {
+      commissionQuery.createdAt = dateRangeQuery;
+    }
+    if (filters.status && filters.status !== "all") {
+      commissionQuery.status = filters.status;
+    }
+
+    const commissions = await CommissionRecord.find(commissionQuery)
+      .populate("paymentRecordId", "_id")
+      .lean();
+
+    // Create maps for quick lookup
+    const landlordPaymentMap = new Map();
+    landlordPayments.forEach((lp) => {
+      if (lp.paymentRecordId?._id) {
+        landlordPaymentMap.set(lp.paymentRecordId._id.toString(), lp);
+      }
+    });
+
+    const commissionMap = new Map();
+    commissions.forEach((c) => {
+      if (c.paymentRecordId?._id) {
+        commissionMap.set(c.paymentRecordId._id.toString(), c);
+      }
+    });
+
+    // Combine all records
+    const records = tenantPayments.map((tp) => {
+      const landlordPayment = landlordPaymentMap.get(tp._id.toString());
+      const commission = commissionMap.get(tp._id.toString());
+
+      const charges = Array.isArray(tp.charges) ? tp.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
+      const totalAmountDue = normalizeAmount(tp.amountDue) + totalCharges;
+
+      return {
+        paymentRecordId: tp._id,
+        tenant: {
+          _id: tp.leaseId?.tenantId?._id || null,
+          name: tp.leaseId?.tenantId
+            ? `${tp.leaseId.tenantId.firstName} ${tp.leaseId.tenantId.lastName}`
+            : "-",
+          email: tp.leaseId?.tenantId?.email || null,
+        },
+        landlord: {
+          _id: tp.leaseId?.landlordId?._id || null,
+          name: tp.leaseId?.landlordId
+            ? tp.leaseId.landlordId.isOrganization
+              ? tp.leaseId.landlordId.organizationName
+              : `${tp.leaseId.landlordId.firstName} ${tp.leaseId.landlordId.lastName}`
+            : "-",
+        },
+        property: {
+          _id: tp.leaseId?.propertyId?._id || null,
+          title: tp.leaseId?.propertyId?.title || "-",
+          address: tp.leaseId?.propertyId?.address || "-",
+        },
+        leaseNumber: tp.leaseId?.leaseNumber || "-",
+        invoiceReceipt: {
+          label: tp.label,
+          amountDue: totalAmountDue,
+          amountPaid: normalizeAmount(tp.amountPaid),
+          status: tp.status,
+          paidDate: tp.paidDate || null,
+          invoiceNumber: tp.invoiceNumber || null,
+          receiptNumber: tp.receiptNumber || null,
+        },
+        landlordPayment: landlordPayment
+          ? {
+              _id: landlordPayment._id,
+              netAmount: normalizeAmount(landlordPayment.netAmount),
+              grossAmount: normalizeAmount(landlordPayment.grossAmount),
+              status: landlordPayment.status,
+              paidAt: landlordPayment.paidAt || null,
+              paymentMethod: landlordPayment.paymentMethod || null,
+              paymentReference: landlordPayment.paymentReference || null,
+            }
+          : null,
+        agentCommission: commission
+          ? {
+              _id: commission._id,
+              agentNetCommission: normalizeAmount(commission.agentNetCommission),
+              agentGrossCommission: normalizeAmount(commission.agentGrossCommission),
+              status: commission.status,
+              paidAt: commission.paidAt || null,
+            }
+          : null,
+        dueDate: tp.dueDate,
+        createdAt: tp.createdAt,
+      };
+    });
+
+    return {
+      records,
+      totals: {
+        totalRecords: records.length,
+        tenantPaymentsTotal: records.reduce((sum, r) => sum + r.invoiceReceipt.amountDue, 0),
+        tenantPaymentsPaid: records
+          .filter((r) => r.invoiceReceipt.status === "PAID")
+          .reduce((sum, r) => sum + r.invoiceReceipt.amountPaid, 0),
+        landlordPaymentsTotal: records
+          .filter((r) => r.landlordPayment)
+          .reduce((sum, r) => sum + (r.landlordPayment?.netAmount || 0), 0),
+        landlordPaymentsPaid: records
+          .filter((r) => r.landlordPayment && (r.landlordPayment.status === "PAID" || r.landlordPayment.status === "PROCESSED"))
+          .reduce((sum, r) => sum + (r.landlordPayment?.netAmount || 0), 0),
+        commissionsTotal: records
+          .filter((r) => r.agentCommission)
+          .reduce((sum, r) => sum + (r.agentCommission?.agentNetCommission || 0), 0),
+        commissionsPaid: records
+          .filter((r) => r.agentCommission && r.agentCommission.status === "PAID")
+          .reduce((sum, r) => sum + (r.agentCommission?.agentNetCommission || 0), 0),
+      },
+    };
   }
 }
 

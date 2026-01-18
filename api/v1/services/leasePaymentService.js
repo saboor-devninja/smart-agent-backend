@@ -43,17 +43,42 @@ class LeasePaymentService {
       }
     };
 
-    records = records.map((r) => ({
-      ...r,
-      amountDue: normalizeAmount(r.amountDue),
-      amountPaid: normalizeAmount(r.amountPaid),
-      charges: Array.isArray(r.charges)
-        ? r.charges.map((c) => ({
-            ...c,
-            amount: normalizeAmount(c.amount),
-          }))
-        : [],
-    }));
+    // Fetch landlord payments for each record
+    const recordIds = records.map((r) => r._id);
+    const landlordPayments = await LandlordPayment.find({
+      paymentRecordId: { $in: recordIds },
+    }).lean();
+
+    const landlordPaymentMap = new Map();
+    landlordPayments.forEach((lp) => {
+      landlordPaymentMap.set(lp.paymentRecordId, lp);
+    });
+
+    records = records.map((r) => {
+      const landlordPayment = landlordPaymentMap.get(r._id);
+      return {
+        ...r,
+        amountDue: normalizeAmount(r.amountDue),
+        amountPaid: normalizeAmount(r.amountPaid),
+        charges: Array.isArray(r.charges)
+          ? r.charges.map((c) => ({
+              ...c,
+              amount: normalizeAmount(c.amount),
+            }))
+          : [],
+        landlordPayment: landlordPayment
+          ? {
+              _id: landlordPayment._id,
+              status: landlordPayment.status,
+              netAmount: normalizeAmount(landlordPayment.netAmount),
+              grossAmount: normalizeAmount(landlordPayment.grossAmount),
+              paidAt: landlordPayment.paidAt,
+              paymentMethod: landlordPayment.paymentMethod,
+              paymentReference: landlordPayment.paymentReference,
+            }
+          : null,
+      };
+    });
 
     return { lease, records };
   }

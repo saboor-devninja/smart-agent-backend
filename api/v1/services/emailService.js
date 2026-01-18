@@ -51,12 +51,14 @@ class EmailService {
     const replyToEmail = `reply-${tempId}@smaartagent.com`;
     const threadId = options.threadId || tempId; // Use provided threadId or create new one
 
+    // Store the original htmlBody (before wrapping) in database
+    // We'll wrap it in full HTML document structure when sending to Resend
     const sentEmail = await SentEmail.create({
       senderId,
       fromEmailIdentityId: identity._id,
       subject,
       body,
-      htmlBody: htmlBody || body.replace(/\n/g, "<br>"),
+      htmlBody: htmlBody || null, // Store original, not wrapped version
       recipients,
       attachments,
       status: "PENDING",
@@ -76,12 +78,30 @@ class EmailService {
         const emailPromises = recipientEmails.map(async (recipientEmail, index) => {
           const uniqueMessageId = `<${tempId}-${index}@smaartagent.com>`;
 
-          // Ensure HTML is properly formatted for email clients
-          let formattedHtml = htmlBody || body.replace(/\n/g, "<br>");
+          // Wrap HTML in proper document structure for email clients
+          // htmlBody is already sanitized by XSS in the controller (preserves <p>, <br>, etc.)
+          let formattedHtml = htmlBody;
           
-          // If HTML doesn't start with <html>, wrap it in a proper HTML structure
-          // This ensures email clients recognize it as HTML
-          if (formattedHtml && !formattedHtml.trim().toLowerCase().startsWith("<!doctype") && !formattedHtml.trim().toLowerCase().startsWith("<html")) {
+          if (formattedHtml) {
+            // If HTML doesn't start with <html>, wrap it in a proper HTML structure
+            // This ensures email clients recognize it as HTML
+            const trimmedHtml = formattedHtml.trim();
+            if (!trimmedHtml.toLowerCase().startsWith("<!doctype") && !trimmedHtml.toLowerCase().startsWith("<html")) {
+              // Wrap the sanitized HTML content in a complete HTML document
+              formattedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px;">
+${trimmedHtml}
+</body>
+</html>`;
+            }
+          } else {
+            // If no htmlBody, create simple HTML from text body
+            const textWithBreaks = body.replace(/\n/g, "<br>");
             formattedHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -89,17 +109,30 @@ class EmailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px;">
-  ${formattedHtml}
+  <p>${textWithBreaks}</p>
 </body>
 </html>`;
           }
+
+          // Debug: Log HTML to verify it's correct
+          if (process.env.NODE_ENV === "development") {
+            console.log("[EmailService] Sending HTML email to:", recipientEmail);
+            console.log("[EmailService] HTML length:", formattedHtml.length);
+            console.log("[EmailService] HTML starts with:", formattedHtml.substring(0, 50));
+            console.log("[EmailService] HTML contains <p>:", formattedHtml.includes("<p>"));
+            console.log("[EmailService] HTML contains <br>:", formattedHtml.includes("<br>"));
+            console.log("[EmailService] HTML contains <html>:", formattedHtml.includes("<html>"));
+          }
+
+          // Ensure HTML is a string and not escaped
+          const htmlToSend = typeof formattedHtml === "string" ? formattedHtml : String(formattedHtml);
 
           const { data, error } = await resend.emails.send({
             from: `${identity.displayName} <${identity.email}>`,
             to: recipientEmail,
             replyTo: replyToEmail,
             subject,
-            html: formattedHtml,
+            html: htmlToSend,
             text: body,
             headers: {
               "Message-ID": uniqueMessageId,

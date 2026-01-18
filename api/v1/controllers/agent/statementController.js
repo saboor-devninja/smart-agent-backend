@@ -38,3 +38,20 @@ exports.getStatementDetails = tryCatchAsync(async (req, res, next) => {
   );
 });
 
+exports.getGenericStatement = tryCatchAsync(async (req, res, next) => {
+  const filters = {
+    status: req.query.status || "all",
+    startDate: req.query.startDate || "",
+    endDate: req.query.endDate || "",
+  };
+
+  const result = await StatementService.getGenericStatement(req.user._id, filters);
+
+  return apiResponse.successResponse(
+    res,
+    result,
+    "Generic statement retrieved successfully",
+    success
+  );
+});
+

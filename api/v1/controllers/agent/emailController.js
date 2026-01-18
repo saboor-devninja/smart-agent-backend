@@ -12,24 +12,33 @@ exports.sendEmail = tryCatchAsync(async (req, res, next) => {
   }
 
   // Sanitize HTML content to prevent XSS
+  // Note: XSS sanitizer should preserve allowed tags like <p> and <br>
   const xss = require("xss");
-  const sanitizedHtmlBody = htmlBody ? xss(htmlBody, {
-    whiteList: {
-      p: [],
-      br: [],
-      strong: [],
-      em: [],
-      u: [],
-      h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
-      ul: [], ol: [], li: [],
-      a: ["href", "title", "target"],
-      blockquote: [],
-      code: [],
-      pre: [],
-    },
-    stripIgnoreTag: true,
-    stripIgnoreTagBody: ["script"],
-  }) : null;
+  let sanitizedHtmlBody = null;
+  
+  if (htmlBody) {
+    // Sanitize the HTML content - XSS will preserve whitelisted tags
+    // We'll wrap it in full HTML document structure in emailService before sending
+    sanitizedHtmlBody = xss(htmlBody.trim(), {
+      whiteList: {
+        p: [],
+        br: [],
+        strong: [],
+        em: [],
+        u: [],
+        h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
+        ul: [], ol: [], li: [],
+        a: ["href", "title", "target"],
+        blockquote: [],
+        code: [],
+        pre: [],
+        div: [],
+        span: [],
+      },
+      stripIgnoreTag: true,
+      stripIgnoreTagBody: ["script"],
+    });
+  }
 
   const sentEmail = await EmailService.sendEmail(
     req.user._id,

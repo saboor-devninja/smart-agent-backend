@@ -31,7 +31,22 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Security middleware
 app.use(helmet());
-app.use(xss());
+
+// XSS protection - but skip for email endpoints that need to send HTML
+app.use((req, res, next) => {
+  // Skip xss-clean for email send endpoints (we sanitize HTML manually in controller)
+  // The xss-clean middleware escapes HTML tags, which breaks our HTML email content
+  const emailSendPaths = [
+    '/api/v1/agent/emails/send',
+    '/api/v1/admin/emails/send',
+  ];
+  
+  if (emailSendPaths.some(path => req.path.startsWith(path)) && req.method === 'POST') {
+    return next();
+  }
+  return xss()(req, res, next);
+});
+
 app.use(mongoSanitize());
 
 // CORS
