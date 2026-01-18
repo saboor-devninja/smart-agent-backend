@@ -232,6 +232,7 @@ async function notifyRentDue(paymentRecordId, leaseId, agentId) {
 async function notifyRentPaid(paymentRecordId, leaseId, agentId) {
   const LeasePaymentRecord = require("../models/LeasePaymentRecord");
   const Lease = require("../models/Lease");
+  const Notification = require("../models/Notification");
   
   const paymentRecord = await LeasePaymentRecord.findById(paymentRecordId).lean();
   const lease = await Lease.findById(leaseId)
@@ -240,6 +241,18 @@ async function notifyRentPaid(paymentRecordId, leaseId, agentId) {
     .lean();
   
   if (!paymentRecord || !lease) return;
+
+  // Check if notification already exists for this payment record (prevent duplicates)
+  const existingNotification = await Notification.findOne({
+    type: "RENT_PAID",
+    paymentRecordId: paymentRecordId.toString(),
+  }).lean();
+
+  // Skip if notification already sent for this payment record
+  if (existingNotification) {
+    console.log(`[Notification] Skipping duplicate RENT_PAID notification for payment ${paymentRecordId}`);
+    return;
+  }
 
   const recipients = await getLeaseNotificationRecipients(leaseId);
   

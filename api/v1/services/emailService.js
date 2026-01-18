@@ -76,12 +76,30 @@ class EmailService {
         const emailPromises = recipientEmails.map(async (recipientEmail, index) => {
           const uniqueMessageId = `<${tempId}-${index}@smaartagent.com>`;
 
+          // Ensure HTML is properly formatted for email clients
+          let formattedHtml = htmlBody || body.replace(/\n/g, "<br>");
+          
+          // If HTML doesn't start with <html>, wrap it in a proper HTML structure
+          // This ensures email clients recognize it as HTML
+          if (formattedHtml && !formattedHtml.trim().toLowerCase().startsWith("<!doctype") && !formattedHtml.trim().toLowerCase().startsWith("<html")) {
+            formattedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px;">
+  ${formattedHtml}
+</body>
+</html>`;
+          }
+
           const { data, error } = await resend.emails.send({
             from: `${identity.displayName} <${identity.email}>`,
             to: recipientEmail,
             replyTo: replyToEmail,
             subject,
-            html: htmlBody || body.replace(/\n/g, "<br>"),
+            html: formattedHtml,
             text: body,
             headers: {
               "Message-ID": uniqueMessageId,

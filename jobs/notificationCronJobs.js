@@ -40,17 +40,17 @@ const checkAndNotifyRentNotReceived = async () => {
           continue;
         }
 
-        // Check if notification already exists for this payment in the last 12 hours
-        const twelveHoursAgo = new Date();
-        twelveHoursAgo.setHours(twelveHoursAgo.getHours() - 12);
+        // Check if notification already exists for this payment in the last 24 hours (once per day)
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
         const existingNotification = await Notification.findOne({
           type: "RENT_OVERDUE",
           paymentRecordId: payment._id.toString(),
-          createdAt: { $gte: twelveHoursAgo },
+          createdAt: { $gte: twentyFourHoursAgo },
         }).lean();
 
-        // Skip if notification already sent in the last 12 hours
+        // Skip if notification already sent in the last 24 hours (prevents duplicate daily notifications)
         if (existingNotification) {
           continue;
         }
@@ -154,17 +154,17 @@ const checkAndNotifyLeaseExpiry = async () => {
           (new Date(lease.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
         );
 
-        // Check if notification already exists for this lease in the last 12 hours
-        const twelveHoursAgo = new Date();
-        twelveHoursAgo.setHours(twelveHoursAgo.getHours() - 12);
+        // Check if notification already exists for this lease in the last 7 days (once per week)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         const existingNotification = await Notification.findOne({
           type: "LEASE_ENDING_SOON",
           leaseId: lease._id.toString(),
-          createdAt: { $gte: twelveHoursAgo },
+          createdAt: { $gte: sevenDaysAgo },
         }).lean();
 
-        // Skip if notification already sent in the last 12 hours
+        // Skip if notification already sent in the last 7 days (prevents duplicate weekly notifications)
         if (existingNotification) {
           continue;
         }
@@ -204,6 +204,7 @@ const startNotificationCronJobs = () => {
   console.log("[CRON] Starting notification cron jobs...");
 
   // Rent Not Received - Every 12 hours (00:00 and 12:00)
+  // Note: Notifications are deduplicated to only send once per day per payment record
   cron.schedule(
     "0 0,12 * * *",
     async () => {
@@ -219,7 +220,7 @@ const startNotificationCronJobs = () => {
     }
   );
   console.log(
-    "[CRON] Scheduled checkAndNotifyRentNotReceived to run every 12 hours (00:00 and 12:00 UTC)"
+    "[CRON] Scheduled checkAndNotifyRentNotReceived to run every 12 hours (00:00 and 12:00 UTC) - deduplicated to once per day"
   );
 
   // Lease Expiry - Every 12 hours (00:00 and 12:00)
