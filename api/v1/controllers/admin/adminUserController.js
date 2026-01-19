@@ -27,9 +27,14 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
 
   // Build filter object
   const filter = {};
-  
+
+  // By default, admin "Users" list should show only agents and agency admins
+  // (platform admins / moderators are managed separately).
+  // Allow overriding via ?role= if needed.
   if (role) {
     filter.role = role;
+  } else {
+    filter.role = { $in: ["AGENT", "AGENCY_ADMIN"] };
   }
   
   if (isActive !== undefined) {
