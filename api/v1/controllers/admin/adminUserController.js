@@ -41,13 +41,21 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
     filter.isActive = isActive === 'true';
   }
   
+  // Add search filter - combine with role filter properly
   if (search) {
-    filter.$or = [
+    const searchConditions = [
       { firstName: { $regex: search, $options: 'i' } },
       { lastName: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },
     ];
+    
+    // If we already have a role filter, we need to combine $or with it
+    // MongoDB will AND the $or with other root-level fields
+    filter.$or = searchConditions;
   }
+  
+  // Debug: log the filter to help troubleshoot
+  console.log('[Admin Users] Filter:', JSON.stringify(filter, null, 2));
 
   // Calculate pagination
   const pageNum = parseInt(page);
@@ -69,6 +77,12 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
       .lean(),
     User.countDocuments(filter),
   ]);
+  
+  // Debug: log results
+  console.log('[Admin Users] Found users:', users.length, 'Total:', total);
+  if (users.length > 0) {
+    console.log('[Admin Users] Sample user roles:', users.slice(0, 3).map(u => ({ email: u.email, role: u.role })));
+  }
 
   // Transform users to include agency name
   const transformedUsers = users.map(user => ({
