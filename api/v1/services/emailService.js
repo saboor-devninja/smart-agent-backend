@@ -395,14 +395,25 @@ ${trimmedHtml}
 
     // If this is a reply, save it as EmailReply
     if (sentEmail) {
+      // Extract body - ensure we have a non-empty string
+      let replyBody = text || "";
+      if (!replyBody && html) {
+        // Strip HTML tags to get text content
+        replyBody = html.replace(/<[^>]*>/g, "").trim();
+      }
+      // Fallback if still empty
+      if (!replyBody) {
+        replyBody = "(no body content)";
+      }
+
       const emailReply = await EmailReply.create({
         sentEmailId: sentEmail._id,
         threadId: sentEmail.threadId || sentEmail._id,
         fromEmail,
         fromName,
-        subject,
-        body: text || html?.replace(/<[^>]*>/g, "") || "",
-        htmlBody: html,
+        subject: subject || "(no subject)",
+        body: replyBody,
+        htmlBody: html || null,
         inReplyTo,
         references,
       });
@@ -435,12 +446,23 @@ ${trimmedHtml}
         const crypto = require("crypto");
         const threadId = crypto.randomUUID();
 
+        // Extract body - ensure we have a non-empty string
+        let emailBody = text || "";
+        if (!emailBody && html) {
+          // Strip HTML tags to get text content
+          emailBody = html.replace(/<[^>]*>/g, "").trim();
+        }
+        // Fallback if still empty
+        if (!emailBody) {
+          emailBody = "(no body content)";
+        }
+
         const inboundEmailData = {
           senderId: emailIdentity.userId,
           fromEmailIdentityId: emailIdentity._id,
           subject: subject || "(no subject)",
-          body: text || html?.replace(/<[^>]*>/g, "") || "",
-          htmlBody: html,
+          body: emailBody,
+          htmlBody: html || null,
           recipients: [{ email: fromEmail, name: fromName }],
           status: "SENT",
           sentAt: new Date(),
