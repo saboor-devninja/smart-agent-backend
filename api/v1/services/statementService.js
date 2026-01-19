@@ -522,6 +522,7 @@ class StatementService {
           address: tp.leaseId?.propertyId?.address || "-",
         },
         leaseNumber: tp.leaseId?.leaseNumber || "-",
+        leaseId: tp.leaseId?._id || null,
         invoiceReceipt: {
           label: tp.label,
           amountDue: totalAmountDue,
@@ -556,8 +557,77 @@ class StatementService {
       };
     });
 
+    // Group records by tenant for aggregated view
+    const tenantMap = new Map();
+    records.forEach((record) => {
+      const tenantId = record.tenant._id || "unknown";
+      if (!tenantMap.has(tenantId)) {
+        tenantMap.set(tenantId, {
+          tenant: record.tenant,
+          properties: new Map(),
+          totalInvoiceAmount: 0,
+          totalInvoicePaid: 0,
+          totalLandlordAmount: 0,
+          totalLandlordPaid: 0,
+          totalCommissionAmount: 0,
+          totalCommissionPaid: 0,
+          recordCount: 0,
+          records: [],
+        });
+      }
+      
+      const tenantData = tenantMap.get(tenantId);
+      tenantData.totalInvoiceAmount += record.invoiceReceipt.amountDue;
+      if (record.invoiceReceipt.status === "PAID") {
+        tenantData.totalInvoicePaid += record.invoiceReceipt.amountPaid || record.invoiceReceipt.amountDue;
+      }
+      
+      if (record.landlordPayment) {
+        tenantData.totalLandlordAmount += record.landlordPayment.netAmount;
+        if (record.landlordPayment.status === "PAID" || record.landlordPayment.status === "PROCESSED") {
+          tenantData.totalLandlordPaid += record.landlordPayment.netAmount;
+        }
+      }
+      
+      if (record.agentCommission) {
+        tenantData.totalCommissionAmount += record.agentCommission.agentNetCommission;
+        if (record.agentCommission.status === "PAID") {
+          tenantData.totalCommissionPaid += record.agentCommission.agentNetCommission;
+        }
+      }
+      
+      tenantData.recordCount++;
+      tenantData.records.push(record);
+      
+      // Group by property within tenant
+      const propertyId = record.property._id || "unknown";
+      if (!tenantData.properties.has(propertyId)) {
+        tenantData.properties.set(propertyId, {
+          property: record.property,
+          landlord: record.landlord,
+          recordCount: 0,
+        });
+      }
+      tenantData.properties.get(propertyId).recordCount++;
+    });
+
+    // Convert map to array for aggregated view
+    const aggregatedRecords = Array.from(tenantMap.values()).map((tenantData) => ({
+      tenant: tenantData.tenant,
+      properties: Array.from(tenantData.properties.values()),
+      totalInvoiceAmount: tenantData.totalInvoiceAmount,
+      totalInvoicePaid: tenantData.totalInvoicePaid,
+      totalLandlordAmount: tenantData.totalLandlordAmount,
+      totalLandlordPaid: tenantData.totalLandlordPaid,
+      totalCommissionAmount: tenantData.totalCommissionAmount,
+      totalCommissionPaid: tenantData.totalCommissionPaid,
+      recordCount: tenantData.recordCount,
+      records: tenantData.records, // Keep individual records for detail view
+    }));
+
     return {
-      records,
+      aggregated: aggregatedRecords,
+      records, // Keep individual records for detail view
       totals: {
         totalRecords: records.length,
         tenantPaymentsTotal: records.reduce((sum, r) => sum + r.invoiceReceipt.amountDue, 0),
