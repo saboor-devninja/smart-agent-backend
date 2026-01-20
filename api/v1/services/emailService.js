@@ -248,12 +248,15 @@ ${trimmedHtml}
         ],
       };
     } else {
-      // For regular emails, only get sent emails (exclude inbound emails)
-      // Replies are stored in EmailReply collection and shown in thread view only
-      // Inbound emails should not appear in the table - only sent emails
-      query = { 
+      // For regular emails, show all emails for this user where they are the sender.
+      // This includes:
+      // - Sent emails (outbound)
+      // - Standalone inbound emails created as new threads (isInbound = true)
+      //
+      // Replies are stored separately in EmailReply and are only shown in the thread view,
+      // so they will NOT appear as separate rows in this inbox table.
+      query = {
         senderId: userId,
-        isInbound: { $ne: true }, // Exclude inbound emails - only show sent emails
       };
     }
 
