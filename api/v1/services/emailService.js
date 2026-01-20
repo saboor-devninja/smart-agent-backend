@@ -391,14 +391,19 @@ ${trimmedHtml}
     const fromEmail = fromMatch ? fromMatch[2] : from;
     const fromName = fromMatch ? fromMatch[1].replace(/"/g, "") : null;
 
+    // Extract the "to" email address (can be string or array)
+    const toEmail = Array.isArray(to) ? to[0] : to;
+
     // Try to find if this is a reply to an existing email
     let sentEmail = null;
 
+    // 1) Detect replies using reply-to header (standard flow)
     if (replyTo && replyTo.includes("@smaartagent.com")) {
-      const emailId = replyTo.match(/reply-([^@]+)@/)?.[1];
-      if (emailId) {
+      const emailIdFromReplyTo = replyTo.match(/reply-([^@]+)@/)?.[1];
+      if (emailIdFromReplyTo) {
         sentEmail = await SentEmail.findOne({
           $or: [
+            { _id: emailIdFromReplyTo },
             { replyToEmail: replyTo },
             { messageId: inReplyTo },
           ],
@@ -406,6 +411,22 @@ ${trimmedHtml}
       }
     }
 
+    // 2) If still not found, detect replies using the \"to\" address
+    //    Resend sometimes puts the reply tracking address in \"to\" instead of \"reply-to\"
+    if (!sentEmail && toEmail && toEmail.includes("@smaartagent.com")) {
+      const emailIdFromTo = toEmail.match(/reply-([^@]+)@/)?.[1];
+      if (emailIdFromTo) {
+        sentEmail = await SentEmail.findOne({
+          $or: [
+            { _id: emailIdFromTo },
+            { replyToEmail: toEmail },
+            { messageId: inReplyTo },
+          ],
+        });
+      }
+    }
+
+    // 3) Fallback: try matching by In-Reply-To header only
     if (!sentEmail && inReplyTo) {
       sentEmail = await SentEmail.findOne({ messageId: inReplyTo });
     }
@@ -439,8 +460,6 @@ ${trimmedHtml}
     }
 
     // If not a reply, check if it's sent to one of our email identities
-    // Extract the "to" email address
-    const toEmail = Array.isArray(to) ? to[0] : to;
     if (toEmail && toEmail.includes("@smaartagent.com")) {
       // Find the email identity that received this
       const EmailIdentity = require("../../../models/EmailIdentity");
