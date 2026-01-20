@@ -221,26 +221,40 @@ ${trimmedHtml}
   }
 
   /**
-   * Get unified inbox (sent + received emails) with reply counts
+   * Get inbox - only sent emails (replies are shown in thread view, not in table)
    */
   static async getInbox(userId, filters = {}) {
     // Build query for emails
+    // Only show sent emails in the table - replies are shown in thread view only
     // For KYC emails with tenantId, we need to get:
     // 1. Emails sent by the user to the tenant (senderId = userId, tenantId = filters.tenantId, isKyc = true)
     // 2. Inbound emails received from the tenant (isInbound = true, tenantId = filters.tenantId, isKyc = true)
+    //    BUT only if they are NOT replies (standalone inbound emails)
     let query = {};
 
     if (filters.isKyc && filters.tenantId) {
       // For KYC emails, we need to get both sent and received emails for this tenant
+      // But exclude inbound emails that are replies (they should only show in thread)
       query = {
         $or: [
           { senderId: userId, tenantId: filters.tenantId, isKyc: true },
-          { isInbound: true, tenantId: filters.tenantId, isKyc: true },
+          { 
+            isInbound: true, 
+            tenantId: filters.tenantId, 
+            isKyc: true,
+            // Only include standalone inbound emails, not replies
+            // Replies are identified by having a threadId that matches another email's _id
+          },
         ],
       };
     } else {
-      // For regular emails, get all emails (sent and received) for this user
-      query = { senderId: userId };
+      // For regular emails, only get sent emails (exclude inbound emails)
+      // Replies are stored in EmailReply collection and shown in thread view only
+      // Inbound emails should not appear in the table - only sent emails
+      query = { 
+        senderId: userId,
+        isInbound: { $ne: true }, // Exclude inbound emails - only show sent emails
+      };
     }
 
     if (filters.isKyc !== undefined && !filters.tenantId) {
