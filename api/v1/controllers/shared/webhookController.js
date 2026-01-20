@@ -3,6 +3,7 @@ const tryCatchAsync = require("../../../../utils/tryCatchAsync");
 const apiResponse = require("../../../../utils/apiResponse");
 const { success } = require("../../../../utils/statusCode").statusCode;
 const config = require("../../../../config/config");
+const { uploadBufferToS3 } = require("../../../../utils/s3");
 
 exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
   const event = req.body;
@@ -51,7 +52,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
       }
     }
 
-    // If body is still missing, fetch from Resend API using email_id
+    // If body/attachments are missing, fetch full email content (and attachments) from Resend API using email_id
     const emailId = emailData.email_id;
 
     // Normalize any attachments already present on webhook payload
@@ -82,7 +83,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
 
         if (response.ok) {
           const emailContent = await response.json();
-          
+
           // Update text and HTML body from API response
           if (emailContent.text && !textBody) {
             textBody = emailContent.text;
@@ -98,18 +99,68 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
             headers = { ...headers, ...emailContent.headers };
           }
 
-          // Normalize attachments from emailContent if provided
-          if (emailContent.attachments && emailContent.attachments.length > 0) {
-            normalizedAttachments = emailContent.attachments.map((att) => ({
-              name: att.filename || att.name || "attachment",
-              url:
-                att.url ||
-                (emailId && att.id
-                  ? `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`
-                  : ""),
-              size: att.size || 0,
-              type: att.content_type || att.type || "application/octet-stream",
-            }));
+          // Normalize attachments from emailContent: fetch binary data from Resend
+          // and upload to our S3, then store S3 URLs in attachments.
+          if (emailContent.attachments && emailContent.attachments.length > 0 && emailId) {
+            try {
+              const fetchedAttachments = await Promise.all(
+                emailContent.attachments.map(
+                  async (att) => {
+                    try {
+                      if (!att.id) {
+                        return null;
+                      }
+
+                      const attachmentResponse = await fetch(
+                        `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`,
+                        {
+                          method: "GET",
+                          headers: {
+                            Authorization: `Bearer ${config.email.resendApiKey}`,
+                          },
+                        }
+                      );
+
+                      if (!attachmentResponse.ok) {
+                        console.error(
+                          `❌ Failed to fetch attachment ${att.filename || att.name}: ${attachmentResponse.status} ${attachmentResponse.statusText}`
+                        );
+                        return null;
+                      }
+
+                      const arrayBuffer = await attachmentResponse.arrayBuffer();
+                      const buffer = Buffer.from(arrayBuffer);
+                      const contentType = att.content_type || att.type || "application/octet-stream";
+                      const baseName = (att.filename || att.name || "attachment").replace(/[^a-zA-Z0-9.-]/g, "_");
+                      const key = `uploads/email-attachments/${emailId}/${Date.now()}-${baseName}`;
+
+                      const url = await uploadBufferToS3(buffer, key, contentType);
+
+                      return {
+                        name: att.filename || att.name || "attachment",
+                        url,
+                        size: buffer.length,
+                        type: contentType,
+                      };
+                    } catch (attachmentError) {
+                      console.error(
+                        `❌ Error fetching/uploading attachment ${att.filename || att.name}:`,
+                        attachmentError
+                      );
+                      return null;
+                    }
+                  }
+                )
+              );
+
+              const validAttachments = fetchedAttachments.filter((a) => a !== null);
+              if (validAttachments.length > 0) {
+                normalizedAttachments = validAttachments;
+                console.log(`✅ Stored ${validAttachments.length} attachment(s) to S3 for email ${emailId}`);
+              }
+            } catch (attachmentFetchError) {
+              console.error("❌ Error processing attachments from Resend API:", attachmentFetchError);
+            }
           }
 
           // Update other fields that might be useful
