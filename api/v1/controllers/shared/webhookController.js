@@ -128,11 +128,36 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
                         return null;
                       }
 
+                      const respContentType =
+                        attachmentResponse.headers.get("content-type") || "";
+
+                      // Some Resend URLs may still return JSON metadata instead of the raw file.
+                      // If we detect JSON, don't wrap it in a data URL; just use the public download_url.
+                      if (respContentType.includes("application/json")) {
+                        try {
+                          const meta = await attachmentResponse.json();
+                          console.warn(
+                            "Received JSON metadata instead of binary for attachment, falling back to download_url",
+                            { filename: att.filename || att.name, metaObject: meta?.object }
+                          );
+                        } catch {
+                          // ignore JSON parse errors, we'll still fall back to download_url
+                        }
+
+                        return {
+                          name: att.filename || att.name || "attachment",
+                          url: att.download_url || downloadUrl,
+                          size: att.size || 0,
+                          type: att.content_type || att.type || "application/octet-stream",
+                        };
+                      }
+
                       const arrayBuffer = await attachmentResponse.arrayBuffer();
                       const buffer = Buffer.from(arrayBuffer);
-                      const contentType = att.content_type || att.type || "application/octet-stream";
+                      const contentType =
+                        att.content_type || att.type || respContentType || "application/octet-stream";
 
-                      // Convert to base64 data URL (existing project behavior)
+                      // Convert to base64 data URL (existing project behavior) when we truly have binary
                       const base64 = buffer.toString("base64");
                       const dataUrl = `data:${contentType};base64,${base64}`;
 
