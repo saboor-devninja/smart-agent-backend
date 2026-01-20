@@ -107,18 +107,28 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
                 emailContent.attachments.map(
                   async (att) => {
                     try {
-                      if (!att.id) {
+                      // Prefer Resend's pre-signed download_url if available
+                      const downloadUrl =
+                        att.download_url ||
+                        (att.id
+                          ? `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`
+                          : null);
+
+                      if (!downloadUrl) {
                         return null;
                       }
 
                       const attachmentResponse = await fetch(
-                        `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`,
-                        {
-                          method: "GET",
-                          headers: {
-                            Authorization: `Bearer ${config.email.resendApiKey}`,
-                          },
-                        }
+                        downloadUrl,
+                        // download_url is already signed and public; only add auth header for direct API calls
+                        att.download_url
+                          ? { method: "GET" }
+                          : {
+                              method: "GET",
+                              headers: {
+                                Authorization: `Bearer ${config.email.resendApiKey}`,
+                              },
+                            }
                       );
 
                       if (!attachmentResponse.ok) {
