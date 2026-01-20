@@ -68,8 +68,10 @@ exports.getProperties = tryCatchAsync(async (req, res, next) => {
 });
 
 exports.getProperty = tryCatchAsync(async (req, res, next) => {
-  // Resource ownership already checked in middleware, use req.resource
-  const property = req.resource || await PropertyService.getPropertyById(req.params.id);
+  // Resource ownership already checked in middleware.
+  // Always use PropertyService.getPropertyById to ensure utilities, media,
+  // landlord info, and lease flags are fully populated.
+  const property = await PropertyService.getPropertyById(req.params.id);
   const propertyData = PropertyReturnDTO.setDTO(property);
 
   apiResponse.successResponse(
