@@ -91,6 +91,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
           // Normalize attachments from emailContent:
           // fetch binary data from Resend and convert to data URLs,
           // similar to the existing project behavior.
+          console.log("emailContent.attachments", emailContent.attachments);
           if (emailContent.attachments && emailContent.attachments.length > 0 && emailId) {
             try {
               const fetchedAttachments = await Promise.all(
@@ -120,6 +121,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
                               },
                             }
                       );
+                      console.log("attachmentResponse", attachmentResponse);
 
                       if (!attachmentResponse.ok) {
                         console.error(
@@ -132,24 +134,55 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
                         attachmentResponse.headers.get("content-type") || "";
 
                       // Some Resend URLs may still return JSON metadata instead of the raw file.
-                      // If we detect JSON, don't wrap it in a data URL; just use the public download_url.
+                      // If we detect JSON, parse it to extract the actual download_url.
+                      console.log("respContentType", respContentType);
                       if (respContentType.includes("application/json")) {
                         try {
                           const meta = await attachmentResponse.json();
-                          console.warn(
-                            "Received JSON metadata instead of binary for attachment, falling back to download_url",
-                            { filename: att.filename || att.name, metaObject: meta?.object }
+                          console.log(
+                            "Received JSON metadata for attachment, extracting download_url",
+                            { filename: att.filename || att.name }
                           );
-                        } catch {
-                          // ignore JSON parse errors, we'll still fall back to download_url
+                          
+                          // Extract the actual download URL from metadata (if present)
+                          console.log("meta", meta);
+                          const actualDownloadUrl = meta.download_url || att.download_url;
+                          
+                          // Only return attachment if we have a valid public URL (not API endpoint)
+                          if (actualDownloadUrl && !actualDownloadUrl.includes("/api.resend.com/emails/receiving/")) {
+                            return {
+                              name: att.filename || att.name || "attachment",
+                              url: actualDownloadUrl,
+                              size: att.size || meta.size || 0,
+                              type: att.content_type || att.type || meta.content_type || "application/octet-stream",
+                            };
+                          } else {
+                            console.warn(
+                              "No valid public download_url found in metadata, skipping attachment",
+                              { filename: att.filename || att.name }
+                            );
+                            return null;
+                          }
+                        } catch (jsonError) {
+                          console.error("Failed to parse JSON metadata:", jsonError);
+                          // If we can't parse JSON and no download_url, skip this attachment
+                          if (!att.download_url) {
+                            return null;
+                          }
                         }
 
-                        return {
-                          name: att.filename || att.name || "attachment",
-                          url: att.download_url || downloadUrl,
-                          size: att.size || 0,
-                          type: att.content_type || att.type || "application/octet-stream",
-                        };
+                        // Fallback: use download_url if available (should be public CDN URL)
+                        if (att.download_url && !att.download_url.includes("/api.resend.com/emails/receiving/")) {
+                          return {
+                            name: att.filename || att.name || "attachment",
+                            url: att.download_url,
+                            size: att.size || 0,
+                            type: att.content_type || att.type || "application/octet-stream",
+                          };
+                        }
+                        
+                        // No valid public URL available
+                        return null;
                       }
 
                       const arrayBuffer = await attachmentResponse.arrayBuffer();
