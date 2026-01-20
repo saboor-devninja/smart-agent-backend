@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const notificationSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     type: {
       type: String,
@@ -114,6 +119,19 @@ notificationSchema.index({ scheduledAt: 1 });
 // Compound index for duplicate notification checks
 notificationSchema.index({ type: 1, paymentRecordId: 1, createdAt: -1 });
 notificationSchema.index({ type: 1, leaseId: 1, createdAt: -1 });
+// docNumber index is automatically created by unique: true
+
+notificationSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "notification_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
 
 const Notification = mongoose.model("Notification", notificationSchema);
 

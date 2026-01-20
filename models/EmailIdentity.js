@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const emailIdentitySchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     userId: {
       type: String,
@@ -41,8 +46,21 @@ const emailIdentitySchema = new mongoose.Schema(
   }
 );
 
+emailIdentitySchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "email_identity_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 emailIdentitySchema.index({ userId: 1 });
 emailIdentitySchema.index({ email: 1 }, { unique: true });
 emailIdentitySchema.index({ isDefault: 1 });
+
 
 module.exports = mongoose.model("EmailIdentity", emailIdentitySchema);

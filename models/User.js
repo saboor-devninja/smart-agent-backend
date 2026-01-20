@@ -1,11 +1,16 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const AutoIncrement = require("./AutoIncrement");
 
 const userSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     email: {
       type: String,
@@ -120,6 +125,14 @@ userSchema.index({ agencyId: 1, role: 1 });
 userSchema.index({ isIndependent: 1 });
 
 userSchema.pre('save', async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "user_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();

@@ -6,6 +6,10 @@ const docuSignEnvelopeSchema = new mongoose.Schema(
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
     },
+    docNumber: {
+      type: Number,
+      unique: true,
+    },
     envelopeId: {
       type: String,
       required: true,
@@ -77,8 +81,21 @@ const docuSignEnvelopeSchema = new mongoose.Schema(
 );
 
 docuSignEnvelopeSchema.index({ leaseId: 1 });
+docuSignEnvelopeSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "docusign_envelope_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 docuSignEnvelopeSchema.index({ agentId: 1 });
 docuSignEnvelopeSchema.index({ status: 1 });
+// docNumber index is automatically created by unique: true
 
 module.exports = mongoose.model("DocuSignEnvelope", docuSignEnvelopeSchema);
 

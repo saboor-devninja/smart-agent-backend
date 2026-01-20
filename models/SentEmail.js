@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const sentEmailSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     subject: {
       type: String,
@@ -102,6 +107,18 @@ const sentEmailSchema = new mongoose.Schema(
   }
 );
 
+sentEmailSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "sent_email_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 sentEmailSchema.index({ senderId: 1, createdAt: -1 });
 // Compound index for inbox queries: senderId + isKyc + tenantId
 sentEmailSchema.index({ senderId: 1, isKyc: 1, tenantId: 1 });
@@ -111,6 +128,7 @@ sentEmailSchema.index({ status: 1 });
 sentEmailSchema.index({ isKyc: 1 });
 sentEmailSchema.index({ threadId: 1 });
 sentEmailSchema.index({ fromEmailIdentityId: 1 });
+// docNumber index is automatically created by unique: true
 
 // Virtual for replies
 sentEmailSchema.virtual("replies", {

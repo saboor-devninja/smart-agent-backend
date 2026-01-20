@@ -246,6 +246,32 @@ class LeaseService {
       );
     }
 
+    if (files && files.docusignDocuments) {
+      const docusignDocumentFiles = Array.isArray(files.docusignDocuments) ? files.docusignDocuments : [files.docusignDocuments];
+      await Promise.all(
+        docusignDocumentFiles.map(async (file, index) => {
+          if (!file || !file[0]) return;
+          const docData = data[`docusignDocuments[${index}]`] || {};
+          const fileUrl = await uploadBufferToS3(
+            file[0].buffer,
+            `lease-docusign-documents/${lease._id}/${Date.now()}-${file[0].originalname}`,
+            file[0].mimetype || "application/pdf"
+          );
+          await LeaseDocument.create({
+            leaseId: lease._id,
+            agentId: agentId,
+            documentName: docData.name || file[0].originalname.replace(/\.[^/.]+$/, ""),
+            documentType: docData.type || "docusign_document",
+            fileUrl: fileUrl,
+            fileSize: file[0].size,
+            mimeType: file[0].mimetype,
+            notes: docData.notes || null,
+            isForSignature: true, // Mark as for signature since these are DocuSign documents
+          });
+        })
+      );
+    }
+
     if (files && files.inspectionMedia) {
       const inspectionFiles = Array.isArray(files.inspectionMedia) ? files.inspectionMedia : [files.inspectionMedia];
       await Promise.all(

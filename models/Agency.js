@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const agencySchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     name: {
       type: String,
@@ -82,8 +87,21 @@ const agencySchema = new mongoose.Schema(
   }
 );
 
+agencySchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "agency_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 agencySchema.index({ status: 1 });
 agencySchema.index({ email: 1 }, { unique: true });
+// docNumber index is automatically created by unique: true
 
 const Agency = mongoose.model("Agency", agencySchema);
 

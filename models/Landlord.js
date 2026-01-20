@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const landlordSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
+    },
+    docNumber: {
+      type: Number,
+      unique: true,
     },
     agentId: {
       type: String,
@@ -75,9 +80,22 @@ const landlordSchema = new mongoose.Schema(
   }
 );
 
+landlordSchema.pre("save", async function (next) {
+  if (this.isNew && !this.docNumber) {
+    const nextSeq = await AutoIncrement.findOneAndUpdate(
+      { name: "landlord_number" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.docNumber = nextSeq.seq;
+  }
+  next();
+});
+
 landlordSchema.index({ agentId: 1 });
 landlordSchema.index({ agencyId: 1 });
 landlordSchema.index({ email: 1 });
+// docNumber index is automatically created by unique: true
 
 const Landlord = mongoose.model("Landlord", landlordSchema);
 
