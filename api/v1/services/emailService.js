@@ -403,7 +403,7 @@ ${trimmedHtml}
    * Process incoming email (webhook) - handles both replies and standalone received emails
    */
   static async processIncomingEmail(webhookData) {
-    const { from, subject, text, html, headers, to } = webhookData;
+    const { from, subject, text, html, headers, to, attachments = [] } = webhookData;
 
     const replyTo = headers?.["reply-to"] || headers?.["Reply-To"] || from;
     const inReplyTo = headers?.["in-reply-to"] || headers?.["In-Reply-To"];
@@ -475,6 +475,7 @@ ${trimmedHtml}
         subject: subject || "(no subject)",
         body: replyBody,
         htmlBody: html || null,
+        attachments: attachments || [],
         inReplyTo,
         references,
       });
@@ -523,6 +524,7 @@ ${trimmedHtml}
           body: emailBody,
           htmlBody: html || null,
           recipients: [{ email: fromEmail, name: fromName }],
+          attachments: attachments || [],
           status: "SENT",
           sentAt: new Date(),
           isInbound: true,

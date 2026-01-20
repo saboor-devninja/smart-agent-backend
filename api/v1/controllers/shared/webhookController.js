@@ -53,6 +53,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
 
     // If body is still missing, fetch from Resend API using email_id
     const emailId = emailData.email_id;
+    let normalizedAttachments = emailData.attachments || [];
     if ((!textBody || !htmlBody) && emailId && config.email?.resendApiKey) {
       try {
         console.log(`📧 Fetching email content from Resend API for email_id: ${emailId}`);
@@ -80,6 +81,16 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
           // Also update headers if available
           if (emailContent.headers && Object.keys(emailContent.headers).length > 0) {
             headers = { ...headers, ...emailContent.headers };
+          }
+
+          // Normalize attachments from emailContent if provided
+          if (!normalizedAttachments.length && emailContent.attachments) {
+            normalizedAttachments = emailContent.attachments.map((att) => ({
+              name: att.filename || att.name || "attachment",
+              url: att.url || "",
+              size: att.size || 0,
+              type: att.content_type || att.type || "application/octet-stream",
+            }));
           }
 
           // Update other fields that might be useful
@@ -127,6 +138,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
         html: htmlBody,
         headers: headers,
         to: toField,
+        attachments: normalizedAttachments,
         messageId: emailData.message_id || emailData.message_id,
       });
 
