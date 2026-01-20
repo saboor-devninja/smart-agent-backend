@@ -282,7 +282,7 @@ ${trimmedHtml}
 
     const emails = await SentEmail.find(query)
       .sort({ createdAt: -1 })
-      .limit(filters.limit || 50)
+      .limit(filters.limit || 200) // fetch more to allow de-duplication by thread
       .skip(filters.offset || 0)
       .populate("tenantId", "firstName lastName email")
       .populate("landlordId", "contactPersonName contactPersonEmail")
@@ -307,9 +307,20 @@ ${trimmedHtml}
       replyCount: replyCountMap[email._id] || 0,
     }));
 
-    const total = await SentEmail.countDocuments(query);
+    // Group by threadId so only one entry per thread appears in the inbox table
+    const seenThreads = new Set();
+    const groupedEmails = [];
 
-    return { emails: emailsWithCounts, total };
+    for (const email of emailsWithCounts) {
+      const threadKey = email.threadId || email._id.toString();
+      if (seenThreads.has(threadKey)) continue;
+      seenThreads.add(threadKey);
+      groupedEmails.push(email);
+    }
+
+    const total = groupedEmails.length;
+
+    return { emails: groupedEmails, total };
   }
 
   /**
@@ -349,12 +360,24 @@ ${trimmedHtml}
    * Get all emails in a thread (including sent emails and replies)
    */
   static async getThreadEmails(threadId) {
-    const sentEmails = await SentEmail.find({ threadId })
+    // Normalize threadId: it might be either the threadId or the _id of the root email
+    let canonicalThreadId = threadId;
+
+    // Try to find a sent email where this id matches either _id or threadId
+    const rootEmail =
+      (await SentEmail.findOne({ _id: threadId }).lean()) ||
+      (await SentEmail.findOne({ threadId }).lean());
+
+    if (rootEmail) {
+      canonicalThreadId = rootEmail.threadId || rootEmail._id.toString();
+    }
+
+    const sentEmails = await SentEmail.find({ threadId: canonicalThreadId })
       .populate("fromEmailIdentityId", "email displayName")
       .sort({ createdAt: 1 })
       .lean();
 
-    const replies = await EmailReply.find({ threadId })
+    const replies = await EmailReply.find({ threadId: canonicalThreadId })
       .sort({ createdAt: 1 })
       .lean();
 

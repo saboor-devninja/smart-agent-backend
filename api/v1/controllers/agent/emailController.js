@@ -5,7 +5,7 @@ const AppError = require("../../../../utils/appError");
 const { success, badRequest } = require("../../../../utils/statusCode").statusCode;
 
 exports.sendEmail = tryCatchAsync(async (req, res, next) => {
-  const { recipients, subject, body, htmlBody, attachments, isKyc, tenantId, landlordId } = req.body;
+  const { recipients, subject, body, htmlBody, attachments, isKyc, tenantId, landlordId, threadId } = req.body;
 
   if (!recipients || !subject || !body) {
     return next(new AppError("Recipients, subject, and body are required", badRequest));
@@ -52,6 +52,7 @@ exports.sendEmail = tryCatchAsync(async (req, res, next) => {
       isKyc: isKyc || false,
       tenantId,
       landlordId,
+      threadId,
     }
   );
 
