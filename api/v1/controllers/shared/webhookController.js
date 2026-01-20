@@ -3,7 +3,6 @@ const tryCatchAsync = require("../../../../utils/tryCatchAsync");
 const apiResponse = require("../../../../utils/apiResponse");
 const { success } = require("../../../../utils/statusCode").statusCode;
 const config = require("../../../../config/config");
-const { uploadBufferToS3 } = require("../../../../utils/s3");
 
 exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
   const event = req.body;
@@ -55,21 +54,11 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
     // Always fetch full email content (and attachments) from Resend API when email_id is present
     const emailId = emailData.email_id;
 
-    // Normalize any attachments already present on webhook payload
-    let normalizedAttachments =
-      Array.isArray(emailData.attachments) && emailData.attachments.length > 0
-        ? emailData.attachments.map((att) => ({
-            name: att.filename || att.name || "attachment",
-            // Resend sometimes provides direct URL; otherwise we can build an API URL using id
-            url:
-              att.url ||
-              (emailId && att.id
-                ? `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`
-                : ""),
-            size: att.size || 0,
-            type: att.content_type || att.type || "application/octet-stream",
-          }))
-        : [];
+    // Start with any attachments directly on webhook payload (if present),
+    // but we'll override them with fully-fetched versions from Resend below.
+    let normalizedAttachments = Array.isArray(emailData.attachments)
+      ? emailData.attachments
+      : [];
     if (emailId && config.email?.resendApiKey) {
       try {
         console.log(`📧 Fetching email content from Resend API for email_id: ${emailId}`);
@@ -99,8 +88,9 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
             headers = { ...headers, ...emailContent.headers };
           }
 
-          // Normalize attachments from emailContent: fetch binary data from Resend
-          // and upload to our S3, then store S3 URLs in attachments.
+          // Normalize attachments from emailContent:
+          // fetch binary data from Resend and convert to data URLs,
+          // similar to the existing project behavior.
           if (emailContent.attachments && emailContent.attachments.length > 0 && emailId) {
             try {
               const fetchedAttachments = await Promise.all(
@@ -141,14 +131,14 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
                       const arrayBuffer = await attachmentResponse.arrayBuffer();
                       const buffer = Buffer.from(arrayBuffer);
                       const contentType = att.content_type || att.type || "application/octet-stream";
-                      const baseName = (att.filename || att.name || "attachment").replace(/[^a-zA-Z0-9.-]/g, "_");
-                      const key = `uploads/email-attachments/${emailId}/${Date.now()}-${baseName}`;
 
-                      const url = await uploadBufferToS3(buffer, key, contentType);
+                      // Convert to base64 data URL (existing project behavior)
+                      const base64 = buffer.toString("base64");
+                      const dataUrl = `data:${contentType};base64,${base64}`;
 
                       return {
                         name: att.filename || att.name || "attachment",
-                        url,
+                        url: dataUrl,
                         size: buffer.length,
                         type: contentType,
                       };
