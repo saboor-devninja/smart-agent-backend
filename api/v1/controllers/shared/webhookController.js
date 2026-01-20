@@ -52,7 +52,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
       }
     }
 
-    // If body/attachments are missing, fetch full email content (and attachments) from Resend API using email_id
+    // Always fetch full email content (and attachments) from Resend API when email_id is present
     const emailId = emailData.email_id;
 
     // Normalize any attachments already present on webhook payload
@@ -70,7 +70,7 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
             type: att.content_type || att.type || "application/octet-stream",
           }))
         : [];
-    if ((!textBody || !htmlBody) && emailId && config.email?.resendApiKey) {
+    if (emailId && config.email?.resendApiKey) {
       try {
         console.log(`📧 Fetching email content from Resend API for email_id: ${emailId}`);
         const response = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
