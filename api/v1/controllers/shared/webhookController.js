@@ -53,7 +53,22 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
 
     // If body is still missing, fetch from Resend API using email_id
     const emailId = emailData.email_id;
-    let normalizedAttachments = emailData.attachments || [];
+
+    // Normalize any attachments already present on webhook payload
+    let normalizedAttachments =
+      Array.isArray(emailData.attachments) && emailData.attachments.length > 0
+        ? emailData.attachments.map((att) => ({
+            name: att.filename || att.name || "attachment",
+            // Resend sometimes provides direct URL; otherwise we can build an API URL using id
+            url:
+              att.url ||
+              (emailId && att.id
+                ? `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`
+                : ""),
+            size: att.size || 0,
+            type: att.content_type || att.type || "application/octet-stream",
+          }))
+        : [];
     if ((!textBody || !htmlBody) && emailId && config.email?.resendApiKey) {
       try {
         console.log(`📧 Fetching email content from Resend API for email_id: ${emailId}`);
@@ -84,10 +99,14 @@ exports.resendWebhook = tryCatchAsync(async (req, res, next) => {
           }
 
           // Normalize attachments from emailContent if provided
-          if (!normalizedAttachments.length && emailContent.attachments) {
+          if (emailContent.attachments && emailContent.attachments.length > 0) {
             normalizedAttachments = emailContent.attachments.map((att) => ({
               name: att.filename || att.name || "attachment",
-              url: att.url || "",
+              url:
+                att.url ||
+                (emailId && att.id
+                  ? `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`
+                  : ""),
               size: att.size || 0,
               type: att.content_type || att.type || "application/octet-stream",
             }));
