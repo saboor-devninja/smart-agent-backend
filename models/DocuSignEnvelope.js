@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const AutoIncrement = require("./AutoIncrement");
 
 const docuSignEnvelopeSchema = new mongoose.Schema(
   {

@@ -5,8 +5,11 @@ class LandlordDTO {
     const landlordData = {};
 
     landlordData._id = landlord._id;
-    landlordData.agentId = landlord.agentId;
-    landlordData.agencyId = landlord.agencyId || null;
+    landlordData.docNumber = landlord.docNumber || null;
+    
+    // Store only ID strings, not populated objects (null-safe)
+    landlordData.agentId = (landlord.agentId && typeof landlord.agentId === 'object' && landlord.agentId._id) ? landlord.agentId._id : (landlord.agentId || null);
+    landlordData.agencyId = (landlord.agencyId && typeof landlord.agencyId === 'object' && landlord.agencyId._id) ? landlord.agencyId._id : (landlord.agencyId || null);
     landlordData.isOrganization = landlord.isOrganization !== undefined ? landlord.isOrganization : false;
     landlordData.organizationName = landlord.organizationName || null;
     landlordData.organizationType = landlord.organizationType || null;

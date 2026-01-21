@@ -3,10 +3,14 @@ class PropertyDTO {
     const propertyData = {};
 
     propertyData._id = property._id;
-    propertyData.agentId = property.agentId;
-    propertyData.landlordId = property.landlordId;
-    propertyData.agencyId = property.agencyId || null;
+    propertyData.docNumber = property.docNumber || null;
+    
+    // Store only ID strings, not populated objects (null-safe)
+    propertyData.agentId = (property.agentId && typeof property.agentId === 'object' && property.agentId._id) ? property.agentId._id : (property.agentId || null);
+    propertyData.landlordId = (property.landlordId && typeof property.landlordId === 'object' && property.landlordId._id) ? property.landlordId._id : (property.landlordId || null);
+    propertyData.agencyId = (property.agencyId && typeof property.agencyId === 'object' && property.agencyId._id) ? property.agencyId._id : (property.agencyId || null);
 
+    // Extract landlord name from populated object if available
     if (property.landlordId && typeof property.landlordId === 'object') {
       const landlord = property.landlordId;
       if (landlord.isOrganization && landlord.organizationName) {
@@ -85,8 +89,12 @@ class PropertyDTO {
       propertyData.hasPendingOrDraftLease = property.hasPendingOrDraftLease;
     }
 
+    // Full landlord DTO object (no duplication - landlordId is already just the ID string above)
     if (property.landlordId && typeof property.landlordId === 'object') {
-      propertyData.landlord = property.landlordId;
+      const LandlordDTO = require("./LandlordDTO");
+      propertyData.landlord = LandlordDTO.setDTO(property.landlordId);
+    } else {
+      propertyData.landlord = null;
     }
 
     return propertyData;

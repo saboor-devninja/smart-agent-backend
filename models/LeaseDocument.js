@@ -33,6 +33,7 @@ const leaseDocumentSchema = new mongoose.Schema(
         "amendment",
         "inspection_report",
         "rental_application",
+        "docusign_document",
         "other",
       ],
       default: "lease_agreement",

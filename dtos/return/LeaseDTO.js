@@ -8,12 +8,16 @@ class LeaseDTO {
     const leaseData = {};
 
     leaseData._id = lease._id;
-    leaseData.propertyId = lease.propertyId;
-    leaseData.tenantId = lease.tenantId;
-    leaseData.agentId = lease.agentId;
-    leaseData.landlordId = lease.landlordId;
-    leaseData.agencyId = lease.agencyId || null;
+    leaseData.docNumber = lease.docNumber || null;
+    
+    // Store only ID strings, not populated objects
+    leaseData.propertyId = (lease.propertyId && typeof lease.propertyId === 'object' && lease.propertyId._id) ? lease.propertyId._id : (lease.propertyId || null);
+    leaseData.tenantId = (lease.tenantId && typeof lease.tenantId === 'object' && lease.tenantId._id) ? lease.tenantId._id : (lease.tenantId || null);
+    leaseData.agentId = (lease.agentId && typeof lease.agentId === 'object' && lease.agentId._id) ? lease.agentId._id : (lease.agentId || null);
+    leaseData.landlordId = (lease.landlordId && typeof lease.landlordId === 'object' && lease.landlordId._id) ? lease.landlordId._id : (lease.landlordId || null);
+    leaseData.agencyId = (lease.agencyId && typeof lease.agencyId === 'object' && lease.agencyId._id) ? lease.agencyId._id : (lease.agencyId || null);
 
+    // Full DTO objects (no duplication)
     if (lease.propertyId && typeof lease.propertyId === 'object') {
       leaseData.property = PropertyDTO.setDTO(lease.propertyId);
       leaseData.propertyTitle = lease.propertyId.title || null;

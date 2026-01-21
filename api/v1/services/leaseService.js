@@ -70,45 +70,6 @@ class LeaseService {
       }
     }
 
-    let tenant;
-    let createdTenant = false;
-
-    if (data.tenantId) {
-      tenant = await Tenant.findById(data.tenantId);
-      if (!tenant) {
-        throw new AppError('Tenant not found', 404);
-      }
-
-      if (agencyId) {
-        if (tenant.agencyId?.toString() !== agencyId.toString()) {
-          throw new AppError('Tenant does not belong to your agency', 403);
-        }
-      } else {
-        if (tenant.agentId?.toString() !== agentId.toString()) {
-          throw new AppError('Tenant does not belong to you', 403);
-        }
-      }
-    } else if (data.tenantFirstName && data.tenantLastName) {
-      const tenantData = {
-        firstName: data.tenantFirstName,
-        lastName: data.tenantLastName,
-        email: data.tenantEmail || null,
-        phoneNumber: data.tenantPhoneNumber || null,
-      };
-
-      const createdTenantData = await TenantService.createTenant(
-        tenantData,
-        property.agentId,
-        agencyId,
-        null
-      );
-
-      tenant = await Tenant.findById(createdTenantData._id);
-      createdTenant = true;
-    } else {
-      throw new AppError('Either tenantId or tenant information (firstName, lastName) is required', 400);
-    }
-
     // Ensure landlordId comes from the property to avoid mismatches
     const propertyLandlordId = property.landlordId?.toString() || property.landlordId;
     const requestedLandlordId = data.landlordId?.toString() || data.landlordId;
@@ -151,6 +112,48 @@ class LeaseService {
     if (data.leaseDuration && property.maximumLease && data.leaseDuration > property.maximumLease) {
       throw new AppError(`Lease duration must not exceed ${property.maximumLease} months (property maximum)`, 400);
     }
+
+    let tenant;
+    let createdTenant = false;
+
+    // NOTE: From this point on, if anything fails and we auto-created a tenant,
+    // we'll clean it up so we don't leave orphan tenants when lease creation fails.
+    try {
+      if (data.tenantId) {
+        tenant = await Tenant.findById(data.tenantId);
+        if (!tenant) {
+          throw new AppError('Tenant not found', 404);
+        }
+
+        if (agencyId) {
+          if (tenant.agencyId?.toString() !== agencyId.toString()) {
+            throw new AppError('Tenant does not belong to your agency', 403);
+          }
+        } else {
+          if (tenant.agentId?.toString() !== agentId.toString()) {
+            throw new AppError('Tenant does not belong to you', 403);
+          }
+        }
+      } else if (data.tenantFirstName && data.tenantLastName) {
+        const tenantData = {
+          firstName: data.tenantFirstName,
+          lastName: data.tenantLastName,
+          email: data.tenantEmail || null,
+          phoneNumber: data.tenantPhoneNumber || null,
+        };
+
+        const createdTenantData = await TenantService.createTenant(
+          tenantData,
+          property.agentId,
+          agencyId,
+          null
+        );
+
+        tenant = await Tenant.findById(createdTenantData._id);
+        createdTenant = true;
+      } else {
+        throw new AppError('Either tenantId or tenant information (firstName, lastName) is required', 400);
+      }
 
     const leaseNumber = await generateLeaseNumber();
 
@@ -206,125 +209,144 @@ class LeaseService {
       agencyCommissionFixed: data.agencyCommissionFixed || null,
     };
 
-    const lease = await Lease.create(leaseData);
+      const lease = await Lease.create(leaseData);
 
-    if (lease.status === 'ACTIVE' || lease.status === 'PENDING_START') {
-      await this.updatePropertyAvailability(lease.propertyId);
-    }
+      if (lease.status === 'ACTIVE' || lease.status === 'PENDING_START') {
+        await this.updatePropertyAvailability(lease.propertyId);
+      }
 
-    if (data.inspectionNotes) {
-      lease.inspectionNotes = data.inspectionNotes;
-      await lease.save();
-    }
+      if (data.inspectionNotes) {
+        lease.inspectionNotes = data.inspectionNotes;
+        await lease.save();
+      }
 
-    // Create default prerequisites for this lease (first rent, security deposit, documents signed)
-    await LeasePrerequisiteService.createDefaultForLease(lease, agentId);
+      // Create default prerequisites for this lease (first rent, security deposit, documents signed)
+      await LeasePrerequisiteService.createDefaultForLease(lease, agentId);
 
-    if (files && files.documents) {
-      const documentFiles = Array.isArray(files.documents) ? files.documents : [files.documents];
-      await Promise.all(
-        documentFiles.map(async (file, index) => {
-          if (!file || !file[0]) return;
-          const docData = data[`documents[${index}]`] || {};
+      // Process regular documents - multer fields are named like "documents[0][file]", "documents[1][file]", etc.
+      if (files) {
+      // Process regular documents
+      let docIndex = 0;
+      while (files[`documents[${docIndex}][file]`]) {
+        const fileArray = files[`documents[${docIndex}][file]`];
+        const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+        if (file) {
+          const docData = data[`documents[${docIndex}]`] || {};
           const fileUrl = await uploadBufferToS3(
-            file[0].buffer,
-            `lease-documents/${lease._id}/${Date.now()}-${file[0].originalname}`,
-            file[0].mimetype || "application/pdf"
+            file.buffer,
+            `lease-documents/${lease._id}/${Date.now()}-${file.originalname}`,
+            file.mimetype || "application/pdf"
           );
           await LeaseDocument.create({
             leaseId: lease._id,
             agentId: agentId,
-            documentName: docData.name || file[0].originalname.replace(/\.[^/.]+$/, ""),
+            documentName: docData.name || file.originalname.replace(/\.[^/.]+$/, ""),
             documentType: docData.type || "lease_agreement",
             fileUrl: fileUrl,
-            fileSize: file[0].size,
-            mimeType: file[0].mimetype,
+            fileSize: file.size,
+            mimeType: file.mimetype,
             notes: docData.notes || null,
             isForSignature: false,
           });
-        })
-      );
-    }
+        }
+        docIndex++;
+      }
 
-    if (files && files.docusignDocuments) {
-      const docusignDocumentFiles = Array.isArray(files.docusignDocuments) ? files.docusignDocuments : [files.docusignDocuments];
-      await Promise.all(
-        docusignDocumentFiles.map(async (file, index) => {
-          if (!file || !file[0]) return;
-          const docData = data[`docusignDocuments[${index}]`] || {};
+      // Process DocuSign documents
+      docIndex = 0;
+      while (files[`docusignDocuments[${docIndex}][file]`]) {
+        const fileArray = files[`docusignDocuments[${docIndex}][file]`];
+        const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+        if (file) {
+          const docData = data[`docusignDocuments[${docIndex}]`] || {};
           const fileUrl = await uploadBufferToS3(
-            file[0].buffer,
-            `lease-docusign-documents/${lease._id}/${Date.now()}-${file[0].originalname}`,
-            file[0].mimetype || "application/pdf"
+            file.buffer,
+            `lease-docusign-documents/${lease._id}/${Date.now()}-${file.originalname}`,
+            file.mimetype || "application/pdf"
           );
           await LeaseDocument.create({
             leaseId: lease._id,
             agentId: agentId,
-            documentName: docData.name || file[0].originalname.replace(/\.[^/.]+$/, ""),
+            documentName: docData.name || file.originalname.replace(/\.[^/.]+$/, ""),
             documentType: docData.type || "docusign_document",
             fileUrl: fileUrl,
-            fileSize: file[0].size,
-            mimeType: file[0].mimetype,
+            fileSize: file.size,
+            mimeType: file.mimetype,
             notes: docData.notes || null,
             isForSignature: true, // Mark as for signature since these are DocuSign documents
           });
-        })
-      );
+        }
+        docIndex++;
+      }
+
+        // Process inspection media
+        if (files.inspectionMedia) {
+        const inspectionFiles = Array.isArray(files.inspectionMedia) ? files.inspectionMedia : [files.inspectionMedia];
+        await Promise.all(
+          inspectionFiles.map(async (file) => {
+            if (!file) return;
+            const fileObj = Array.isArray(file) ? file[0] : file;
+            if (!fileObj) return;
+            const fileUrl = await uploadBufferToS3(
+              fileObj.buffer,
+              `lease-inspection/${lease._id}/${Date.now()}-${fileObj.originalname}`,
+              fileObj.mimetype || "image/jpeg"
+            );
+            await LeaseDocument.create({
+              leaseId: lease._id,
+              agentId: agentId,
+              documentName: fileObj.originalname.replace(/\.[^/.]+$/, ""),
+              documentType: "inspection_report",
+              fileUrl: fileUrl,
+              fileSize: fileObj.size,
+              mimeType: fileObj.mimetype,
+              notes: "Inspection media",
+              isForSignature: false,
+            });
+          })
+        );
+        }
+      }
+
+      const populatedLease = await Lease.findById(lease._id)
+        .populate("propertyId", "title address city state country")
+        .populate("tenantId", "firstName lastName email phoneNumber")
+        .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
+        .populate("agentId", "firstName lastName email")
+        .lean();
+
+      const leaseDTO = LeaseReturnDTO.setDTO(populatedLease);
+      
+      if (createdTenant) {
+        leaseDTO.createdTenant = {
+          _id: tenant._id,
+          firstName: tenant.firstName,
+          lastName: tenant.lastName,
+          email: tenant.email,
+        };
+      }
+
+      // Create notification for lease creation
+      try {
+        const { notifyLeaseCreated } = require("../../../utils/notificationHelper");
+        await notifyLeaseCreated(lease._id, agentId);
+      } catch (error) {
+        console.error("Error creating lease notification:", error);
+        // Don't fail lease creation if notification fails
+      }
+
+      return leaseDTO;
+    } catch (err) {
+      // Roll back auto-created tenant if something fails after creation
+      if (createdTenant && tenant && tenant._id) {
+        try {
+          await Tenant.findByIdAndDelete(tenant._id);
+        } catch (cleanupError) {
+          console.error("Failed to clean up auto-created tenant after lease error:", cleanupError);
+        }
+      }
+      throw err;
     }
-
-    if (files && files.inspectionMedia) {
-      const inspectionFiles = Array.isArray(files.inspectionMedia) ? files.inspectionMedia : [files.inspectionMedia];
-      await Promise.all(
-        inspectionFiles.map(async (file) => {
-          if (!file || !file[0]) return;
-          const fileUrl = await uploadBufferToS3(
-            file[0].buffer,
-            `lease-inspection/${lease._id}/${Date.now()}-${file[0].originalname}`,
-            file[0].mimetype || "image/jpeg"
-          );
-          await LeaseDocument.create({
-            leaseId: lease._id,
-            agentId: agentId,
-            documentName: file[0].originalname.replace(/\.[^/.]+$/, ""),
-            documentType: "inspection_report",
-            fileUrl: fileUrl,
-            fileSize: file[0].size,
-            mimeType: file[0].mimetype,
-            notes: "Inspection media",
-            isForSignature: false,
-          });
-        })
-      );
-    }
-
-    const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country")
-      .populate("tenantId", "firstName lastName email phoneNumber")
-      .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
-      .populate("agentId", "firstName lastName email")
-      .lean();
-
-    const leaseDTO = LeaseReturnDTO.setDTO(populatedLease);
-    
-    if (createdTenant) {
-      leaseDTO.createdTenant = {
-        _id: tenant._id,
-        firstName: tenant.firstName,
-        lastName: tenant.lastName,
-        email: tenant.email,
-      };
-    }
-
-    // Create notification for lease creation
-    try {
-      const { notifyLeaseCreated } = require("../../../utils/notificationHelper");
-      await notifyLeaseCreated(lease._id, agentId);
-    } catch (error) {
-      console.error("Error creating lease notification:", error);
-      // Don't fail lease creation if notification fails
-    }
-
-    return leaseDTO;
   }
 
   static async getLeases(agentId, agencyId, filters = {}) {
@@ -400,6 +422,7 @@ class LeaseService {
       throw new AppError("Lease not found", 404);
     }
 
+    // Fetch all documents - .lean() returns all fields including docNumber
     const documents = await LeaseDocument.find({ leaseId: lease._id }).lean();
     const docusignEnvelopes = await DocuSignEnvelope.find({ leaseId: lease._id })
       .sort({ createdAt: -1 })

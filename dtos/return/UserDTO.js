@@ -2,6 +2,7 @@ class UserDTO {
   static setDTO(user) {
     const newUser = {};
     newUser._id = user._id;
+    newUser.docNumber = user.docNumber || null;
     newUser.email = user.email;
     newUser.firstName = user.firstName;
     newUser.lastName = user.lastName;
@@ -15,7 +16,9 @@ class UserDTO {
     newUser.companyWebsite = user.companyWebsite || null;
     newUser.companyLogo = user.companyLogo || null;
     newUser.role = user.role;
-    newUser.agencyId = user.agencyId || null;
+    
+    // Store only ID string, not populated object (null-safe)
+    newUser.agencyId = (user.agencyId && typeof user.agencyId === 'object' && user.agencyId._id) ? user.agencyId._id : (user.agencyId || null);
     newUser.isIndependent = user.isIndependent || false;
     newUser.currency = user.currency || "USD";
     newUser.currencySymbol = user.currencySymbol || "$";

@@ -53,6 +53,7 @@ const config = {
     connectHmacKey: process.env.DS_CONNECT_HMAC_KEY,
     oauthBase: process.env.DS_OAUTH_BASE || 'https://account-d.docusign.com',
     privateKeyB64: process.env.DS_PRIVATE_KEY_B64,
+    frontendUrl: process.env.DOCUSIGN_APP_URL || 'http://localhost:3000',
   },
   
   email: {

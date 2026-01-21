@@ -5,9 +5,13 @@ class TenantDTO {
     const tenantData = {};
 
     tenantData._id = tenant._id;
-    tenantData.agentId = tenant.agentId;
-    tenantData.agencyId = tenant.agencyId || null;
+    tenantData.docNumber = tenant.docNumber || null;
+    
+    // Store only ID strings, not populated objects (null-safe)
+    tenantData.agentId = (tenant.agentId && typeof tenant.agentId === 'object' && tenant.agentId._id) ? tenant.agentId._id : (tenant.agentId || null);
+    tenantData.agencyId = (tenant.agencyId && typeof tenant.agencyId === 'object' && tenant.agencyId._id) ? tenant.agencyId._id : (tenant.agencyId || null);
 
+    // Full agent object (no duplication - agentId is already just the ID string above)
     if (tenant.agentId && typeof tenant.agentId === "object") {
       tenantData.agent = {
         _id: tenant.agentId._id,

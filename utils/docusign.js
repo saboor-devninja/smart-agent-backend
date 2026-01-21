@@ -225,7 +225,7 @@ async function getEnvelopeRecipients(envelopeId) {
 async function createRecipientViewUrl(params) {
   const { envelopeId, name, email, clientUserId } = params;
   const { accessToken, accountId, baseUri } = await getBaseUriAndAccountId();
-  const appBaseUrl = config.app.baseUrl;
+  const appBaseUrl = config.docusign.frontendUrl;
 
   try {
     const recipients = await getEnvelopeRecipients(envelopeId);
@@ -250,6 +250,7 @@ async function createRecipientViewUrl(params) {
       }
     }
   } catch (error) {
+    console.error("Error creating recipient view URL:", error);
     throw error;
   }
 
