@@ -117,3 +117,24 @@ exports.sendSigningEmails = tryCatchAsync(async (req, res, next) => {
     success
   );
 });
+exports.sendSigningEmails = tryCatchAsync(async (req, res, next) => {
+  const { envelopeId } = req.params;
+
+  if (!envelopeId) {
+    return next(new AppError("Envelope ID is required", badRequest));
+  }
+
+  const result = await DocuSignService.sendSigningEmails(
+    envelopeId,
+    req.user._id,
+    req.user.agencyId || null
+  );
+
+  return apiResponse.successResponse(
+    res,
+    { result },
+    "DocuSign signing emails sent",
+    success
+  );
+});
+

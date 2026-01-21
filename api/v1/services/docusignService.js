@@ -45,9 +45,8 @@ class DocuSignService {
     const landlordName = landlord.isOrganization
       ? landlord.organizationName
       : `${landlord.firstName} ${landlord.lastName}`;
-    const landlordEmail = landlord.isOrganization
-      ? (landlord.contactPersonEmail || landlord.email)
-      : landlord.email;
+    // Prefer contactPersonEmail if present, regardless of organization flag
+    const landlordEmail = landlord.contactPersonEmail || landlord.email;
     const tenantName = `${tenant.firstName} ${tenant.lastName}`;
     const tenantEmail = tenant.email;
 
@@ -202,9 +201,8 @@ class DocuSignService {
           landlord.isOrganization && landlord.organizationName
             ? landlord.organizationName
             : `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim();
-        landlordEmail = landlord.isOrganization
-          ? landlord.contactPersonEmail || landlord.email
-          : landlord.email;
+        // Always prefer contactPersonEmail if available
+        landlordEmail = landlord.contactPersonEmail || landlord.email;
       }
 
       if (!landlordEmail) {
