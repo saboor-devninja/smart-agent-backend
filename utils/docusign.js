@@ -149,6 +149,12 @@ async function createEnvelopeFromDocument(params) {
   const { fileName, fileBase64, landlord, tenant, emailSubject } = params;
   const { accessToken, accountId, baseUri } = await getBaseUriAndAccountId();
 
+  // Build webhook URL - must point to backend, not frontend
+  const backendUrl = config.app.backendUrl || process.env.BACKEND_URL || "http://localhost:5000";
+  const webhookUrl = `${backendUrl.replace(/\/+$/, "")}/api/webhooks/docusign`;
+  
+  console.log("📡 DocuSign webhook URL configured:", webhookUrl);
+
   const envelope = {
     emailSubject: emailSubject || "Lease agreement for signature",
     documents: [
@@ -184,6 +190,67 @@ async function createEnvelopeFromDocument(params) {
               { documentId: "1", pageNumber: "1", xPosition: "100", yPosition: "600" },
             ],
           },
+        },
+      ],
+    },
+    eventNotification: {
+      url: webhookUrl,
+      loggingEnabled: true,
+      requireAcknowledgment: false,
+      useSoapInterface: false,
+      includeCertificateWithSoap: false,
+      signMessageWithX509Cert: false,
+      includeDocuments: false,
+      includeEnvelopeVoidReason: true,
+      includeTimeZone: true,
+      includeSenderAccountAsCustomField: false,
+      includeDocumentFields: false,
+      includeCertificateOfCompletion: false,
+      enabled: true,
+      events: [
+        {
+          envelopeEventStatusCode: "sent",
+          includeDocuments: false,
+        },
+        {
+          envelopeEventStatusCode: "delivered",
+          includeDocuments: false,
+        },
+        {
+          envelopeEventStatusCode: "completed",
+          includeDocuments: false,
+        },
+        {
+          envelopeEventStatusCode: "declined",
+          includeDocuments: false,
+        },
+        {
+          envelopeEventStatusCode: "voided",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "Sent",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "Delivered",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "Completed",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "Declined",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "AuthenticationFailed",
+          includeDocuments: false,
+        },
+        {
+          recipientEventStatusCode: "AutoResponded",
+          includeDocuments: false,
         },
       ],
     },

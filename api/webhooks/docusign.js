@@ -168,12 +168,17 @@ async function updateLeaseDocumentsAfterSigning(envelopeId, completedAt) {
 async function handleDocuSignWebhook(req, res) {
   console.log("\n========== DocuSign Webhook Received ==========");
   console.log("Timestamp:", new Date().toISOString());
+  console.log("Request Method:", req.method);
+  console.log("Request URL:", req.url);
+  console.log("Headers:", JSON.stringify(req.headers, null, 2));
 
   const signature = req.headers["x-docusign-signature-1"];
   const rawBody = req.rawBody ? req.rawBody.toString() : JSON.stringify(req.body);
 
   console.log("HMAC Key configured:", config.docusign.connectHmacKey ? "YES" : "NO");
   console.log("Signature provided:", signature ? "YES" : "NO");
+  console.log("Raw body length:", rawBody?.length || 0);
+  console.log("Raw body preview (first 500 chars):", rawBody?.substring(0, 500) || "N/A");
 
   const hmacResult = verifyDocusignHmac(rawBody, signature);
 

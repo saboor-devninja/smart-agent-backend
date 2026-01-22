@@ -62,6 +62,7 @@ const config = {
   
   app: {
     baseUrl: process.env.APP_BASE_URL || 'http://localhost:3000',
+    backendUrl: process.env.BACKEND_URL || 'http://localhost:5000',
   },
 };
 
