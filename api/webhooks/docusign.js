@@ -13,20 +13,42 @@ function extractFields(payload) {
   let voidedReason;
   let recipients = [];
 
+  // Handle Connect webhook format (with envelopeSummary)
   if (payload.data) {
     envelopeId = payload.data.envelopeId || payload.data.envelope?.envelopeId;
-    status = payload.data.status || payload.data.envelope?.status;
-    statusChangedAt = payload.data.statusChangedDateTime
-      ? new Date(payload.data.statusChangedDateTime)
-      : new Date();
+    
+    // Check multiple possible locations for status
+    status = 
+      payload.data.envelopeSummary?.status ||
+      payload.data.status ||
+      payload.data.envelope?.status ||
+      payload.event?.replace("envelope-", ""); // e.g., "envelope-completed" -> "completed"
+    
+    // Get statusChangedDateTime from envelopeSummary or data
+    statusChangedAt = 
+      payload.data.envelopeSummary?.statusChangedDateTime
+        ? new Date(payload.data.envelopeSummary.statusChangedDateTime)
+        : payload.data.statusChangedDateTime
+        ? new Date(payload.data.statusChangedDateTime)
+        : new Date();
+    
+    // Get completedDateTime from envelopeSummary or data
     completedAt =
-      status === "completed" && payload.data.completedDateTime
+      status === "completed" && payload.data.envelopeSummary?.completedDateTime
+        ? new Date(payload.data.envelopeSummary.completedDateTime)
+        : status === "completed" && payload.data.completedDateTime
         ? new Date(payload.data.completedDateTime)
         : undefined;
-    voidedReason = payload.data.voidedReason || null;
+    
+    voidedReason = payload.data.envelopeSummary?.voidedReason || payload.data.voidedReason || null;
 
-    if (payload.data.recipients) {
-      recipients = (payload.data.recipients.signers || []).map((signer) => ({
+    // Extract recipients from envelopeSummary or data
+    const recipientsData = 
+      payload.data.envelopeSummary?.recipients ||
+      payload.data.recipients;
+    
+    if (recipientsData) {
+      recipients = (recipientsData.signers || []).map((signer) => ({
         recipientId: signer.recipientId,
         status: signer.status,
         email: signer.email,
@@ -35,6 +57,7 @@ function extractFields(payload) {
       }));
     }
   } else if (payload.envelopeId) {
+    // Fallback for direct envelope payload format
     envelopeId = payload.envelopeId;
     status = payload.status;
     statusChangedAt = payload.statusChangedDateTime ? new Date(payload.statusChangedDateTime) : new Date();
@@ -202,7 +225,20 @@ async function handleDocuSignWebhook(req, res) {
 
   console.log("Envelope ID:", envelopeId);
   console.log("Status:", status);
+  console.log("Completed At:", completedAt);
+  console.log("Status Changed At:", statusChangedAt);
   console.log("Recipients count:", recipients?.length || 0);
+  console.log("Event type:", parsed.event || "N/A");
+  
+  // Log full payload structure for debugging (first time only)
+  if (!status && parsed.data) {
+    console.log("⚠️  Payload structure debug:", JSON.stringify({
+      hasEnvelopeSummary: !!parsed.data.envelopeSummary,
+      envelopeSummaryStatus: parsed.data.envelopeSummary?.status,
+      dataStatus: parsed.data.status,
+      event: parsed.event
+    }, null, 2));
+  }
 
   if (!envelopeId || !status) {
     console.error("DocuSign webhook missing required fields", { envelopeId, status });
