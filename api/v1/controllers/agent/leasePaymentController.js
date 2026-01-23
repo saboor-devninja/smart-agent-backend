@@ -140,7 +140,6 @@ exports.getAll = tryCatchAsync(async (req, res, next) => {
   );
 });
 
-
 exports.delete = tryCatchAsync(async (req, res, next) => {
   const { id } = req.params;
 
