@@ -407,12 +407,44 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
 
       if (paymentRecord) {
         // Update existing record
+        const wasPaid = paymentRecord.status === "PAID";
         paymentRecord.status = "PAID";
         paymentRecord.amountPaid = row.amount;
         paymentRecord.paidDate = row.transactionDate;
         paymentRecord.paymentMethod = "BANK_TRANSFER";
         paymentRecord.paymentReference = row.bankReference || `IMPORT-${row._id}`;
         await paymentRecord.save();
+        
+        // Create/update commission records since payment is now PAID
+        try {
+          const CommissionService = require("../../services/commissionService");
+          const CommissionRecord = require("../../../../models/CommissionRecord");
+          
+          const existingCommission = await CommissionRecord.findOne({
+            paymentRecordId: paymentRecord._id,
+          }).lean();
+
+          if (!existingCommission) {
+            // Create new commission if payment just became PAID
+            await CommissionService.calculateAndRecord(paymentRecord.toObject(), agentId, agencyId);
+          } else {
+            // Update existing commission (handles amount changes and reactivation)
+            await CommissionService.recalculateAndUpdate(paymentRecord.toObject(), agentId, agencyId);
+          }
+
+          // Mark commission as PAID when tenant payment is fully paid
+          await CommissionRecord.updateOne(
+            { paymentRecordId: paymentRecord._id },
+            {
+              status: "PAID",
+              paidAt: paymentRecord.paidDate || new Date(),
+            }
+          );
+        } catch (error) {
+          console.error("Error creating commission for updated payment record:", error);
+          // Don't fail the import if commission calculation fails
+        }
+        
         results.updated++;
       } else {
         results.errors.push({
@@ -440,6 +472,28 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
         paymentMethod: "BANK_TRANSFER",
         paymentReference: row.bankReference || `IMPORT-${row._id}`,
       });
+      
+      // Create commission records since payment is already PAID
+      try {
+        const CommissionService = require("../../services/commissionService");
+        const CommissionRecord = require("../../../../models/CommissionRecord");
+        
+        // Create commission and landlord payment records
+        await CommissionService.calculateAndRecord(paymentRecord.toObject(), agentId, agencyId);
+        
+        // Mark commission as PAID since payment is already paid
+        await CommissionRecord.updateOne(
+          { paymentRecordId: paymentRecord._id },
+          {
+            status: "PAID",
+            paidAt: paymentRecord.paidDate || new Date(),
+          }
+        );
+      } catch (error) {
+        console.error("Error creating commission for new payment record:", error);
+        // Don't fail the import if commission calculation fails
+      }
+      
       results.created++;
     } else {
       results.errors.push({ rowId, error: `Invalid action: ${action}` });

@@ -33,6 +33,7 @@ exports.errorResponse = (err, res) => {
 };
 
 exports.successResponse = (res, data, message, code) => {
-  return res.status(code).json({ code, data, message, status: "Success" });
+  // Don't include message in response - HTTP service will handle toasts
+  return res.status(code).json({ code, data, status: "Success" });
 };
 

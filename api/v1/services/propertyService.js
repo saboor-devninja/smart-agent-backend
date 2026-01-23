@@ -195,7 +195,7 @@ class PropertyService {
       const Lease = require("../../../models/Lease");
       const Tenant = require("../../../models/Tenant");
       leases = await Lease.find({ propertyId: { $in: propertyIds } })
-        .select('_id propertyId leaseNumber status rentAmount startDate endDate tenantId')
+        .select('_id docNumber propertyId leaseNumber status rentAmount startDate endDate tenantId')
         .lean();
       
       const tenantIds = [...new Set(leases.map(l => l.tenantId).filter(Boolean))];
@@ -221,6 +221,7 @@ class PropertyService {
         const tenant = lease.tenantId && tenantMap[lease.tenantId] ? tenantMap[lease.tenantId] : null;
         leasesMap[lease.propertyId].push({
           _id: lease._id,
+          docNumber: lease.docNumber || null,
           leaseNumber: lease.leaseNumber,
           status: lease.status,
           rentAmount: lease.rentAmount ? parseFloat(lease.rentAmount.toString()) : 0,

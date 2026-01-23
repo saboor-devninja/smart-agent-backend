@@ -723,6 +723,89 @@ class LeasePaymentService {
     };
   }
 
+  /**
+   * Delete a payment record and all related records
+   * @param {string} id - Payment record ID
+   * @param {string} agentId - Agent ID
+   * @param {string|null} agencyId - Agency ID
+   * @returns {Object} - Deleted payment record
+   */
+  static async delete(id, agentId, agencyId) {
+    const record = await LeasePaymentRecord.findById(id);
+    if (!record) {
+      throw new AppError("Payment record not found", 404);
+    }
+
+    const leaseQuery = agencyId
+      ? { _id: record.leaseId, agencyId }
+      : { _id: record.leaseId, agentId };
+    const lease = await Lease.findOne(leaseQuery).lean();
+    if (!lease) {
+      throw new AppError("Lease not found or access denied", 404);
+    }
+
+    // Find and delete related statement rows
+    // Statement rows are linked through leaseId, periodMonth, and periodYear
+    // When payment records are created from imports, paymentReference is set to "IMPORT-{rowId}"
+    const AgentStatementRow = require("../../../models/AgentStatementRow");
+    const mongoose = require("mongoose");
+    
+    if (record.dueDate) {
+      const dueDate = new Date(record.dueDate);
+      const periodMonth = dueDate.getMonth() + 1;
+      const periodYear = dueDate.getFullYear();
+
+      // Build query to find statement rows that match this payment record
+      const query = {
+        leaseId: record.leaseId,
+        periodMonth,
+        periodYear,
+        status: "APPLIED",
+      };
+
+      // If payment record has a paymentReference like "IMPORT-{rowId}", extract the rowId
+      if (record.paymentReference && record.paymentReference.startsWith("IMPORT-")) {
+        const rowIdString = record.paymentReference.replace("IMPORT-", "");
+        // Convert string to ObjectId for matching
+        try {
+          const rowId = new mongoose.Types.ObjectId(rowIdString);
+          query._id = rowId;
+        } catch (e) {
+          // If conversion fails, try matching by string
+          query._id = rowIdString;
+        }
+      } else if (record.paymentReference) {
+        // If paymentReference doesn't match the pattern, try exact match
+        query.paymentReference = record.paymentReference;
+      }
+
+      const statementRows = await AgentStatementRow.find(query);
+
+      // Delete matching statement rows
+      if (statementRows.length > 0) {
+        await AgentStatementRow.deleteMany({
+          _id: { $in: statementRows.map((r) => r._id) },
+        });
+      }
+    }
+
+    // Delete related commission records
+    const CommissionRecord = require("../../../models/CommissionRecord");
+    await CommissionRecord.deleteMany({ paymentRecordId: record._id });
+
+    // Delete related landlord payments
+    await LandlordPayment.deleteMany({ paymentRecordId: record._id });
+
+    // Delete related notifications
+    const Notification = require("../../../models/Notification");
+    await Notification.deleteMany({ paymentRecordId: record._id });
+
+    // Delete the payment record itself
+    await LeasePaymentRecord.findByIdAndDelete(id);
+
+    return record.toObject();
+  }
+
 }
 
 module.exports = LeasePaymentService;

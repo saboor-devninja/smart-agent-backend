@@ -140,3 +140,24 @@ exports.getAll = tryCatchAsync(async (req, res, next) => {
   );
 });
 
+
+exports.delete = tryCatchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return next(new AppError("Payment record id is required", badRequest));
+  }
+
+  const record = await LeasePaymentService.delete(
+    id,
+    req.user._id,
+    req.user.agencyId || null
+  );
+
+  return apiResponse.successResponse(
+    res,
+    { record },
+    "Payment record and related records deleted successfully",
+    success
+  );
+});
