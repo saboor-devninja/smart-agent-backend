@@ -64,6 +64,10 @@ class StatementService {
     if (filters.status && filters.status !== "all") {
       landlordPaymentQuery.status = filters.status;
     }
+    // Optional property filter for landlord statements
+    if (filters.propertyId) {
+      landlordPaymentQuery.propertyId = filters.propertyId;
+    }
 
     const landlordPayments = await LandlordPayment.find(landlordPaymentQuery)
       .populate("leaseId", "leaseNumber")

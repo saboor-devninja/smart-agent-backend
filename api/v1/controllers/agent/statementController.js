@@ -8,6 +8,7 @@ exports.getCombinedStatements = tryCatchAsync(async (req, res, next) => {
     status: req.query.status || "all",
     startDate: req.query.startDate || "",
     endDate: req.query.endDate || "",
+    propertyId: req.query.propertyId || "",
   };
 
   const result = await StatementService.getCombinedStatements(req.user._id, filters);
