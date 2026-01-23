@@ -13,6 +13,7 @@ const commissionRoutes = require("./commission.routes");
 const financeRoutes = require("./finance.routes");
 const emailRoutes = require("./email.routes");
 const agentRoutes = require("./agent.routes");
+const importRoutes = require("./import.routes");
 
 const router = express.Router();
 
@@ -30,5 +31,6 @@ router.use("/commissions", commissionRoutes);
 router.use("/finance", financeRoutes);
 router.use("/emails", emailRoutes);
 router.use("/agents", agentRoutes);
+router.use("/imports", importRoutes);
 
 module.exports = router;

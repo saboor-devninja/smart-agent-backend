@@ -403,15 +403,42 @@ class TenantService {
       .sort({ firstName: 1, lastName: 1 })
       .lean();
 
+    const tenantIds = tenants.map((t) => t._id);
+
+    let leasesByTenant = new Map();
+    if (tenantIds.length > 0) {
+      const Lease = require("../../../models/Lease");
+      const leases = await Lease.find({
+        tenantId: { $in: tenantIds },
+        status: { $in: ["DRAFT", "PENDING_START", "ACTIVE"] },
+      })
+        .select("_id tenantId status")
+        .lean();
+
+      leases.forEach((lease) => {
+        const key = lease.tenantId.toString();
+        const existing = leasesByTenant.get(key) || [];
+        existing.push(lease);
+        leasesByTenant.set(key, existing);
+      });
+    }
+
     return {
-      tenants: tenants.map((tenant) => ({
-        _id: tenant._id,
-        firstName: tenant.firstName,
-        lastName: tenant.lastName,
-        email: tenant.email,
-        phoneNumber: tenant.phoneNumber,
-        displayName: `${tenant.firstName} ${tenant.lastName}`.trim(),
-      })),
+      tenants: tenants.map((tenant) => {
+        const key = tenant._id.toString();
+        const tenantLeases = leasesByTenant.get(key) || [];
+        const hasActiveOrPendingLease = tenantLeases.length > 0;
+
+        return {
+          _id: tenant._id,
+          firstName: tenant.firstName,
+          lastName: tenant.lastName,
+          email: tenant.email,
+          phoneNumber: tenant.phoneNumber,
+          displayName: `${tenant.firstName} ${tenant.lastName}`.trim(),
+          hasActiveOrPendingLease,
+        };
+      }),
     };
   }
 

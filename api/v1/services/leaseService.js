@@ -134,6 +134,20 @@ class LeaseService {
             throw new AppError('Tenant does not belong to you', 403);
           }
         }
+
+        // Ensure tenant is not already linked to an ACTIVE / PENDING_START / DRAFT lease
+        const existingTenantLease = await Lease.findOne({
+          tenantId: tenant._id,
+          status: { $in: ['DRAFT', 'PENDING_START', 'ACTIVE'] },
+        }).lean();
+
+        if (existingTenantLease) {
+          throw new AppError(
+            'This tenant is already linked to an active or draft lease. Please terminate or cancel the existing lease before creating a new one.',
+            400
+          );
+        }
+
       } else if (data.tenantFirstName && data.tenantLastName) {
         const tenantData = {
           firstName: data.tenantFirstName,
