@@ -204,9 +204,8 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("User with this email already exists", 400));
   }
 
-  // Hash password
-  const bcrypt = require("bcryptjs");
-  const hashedPassword = await bcrypt.hash(password, 12);
+  // Password will be hashed by User model's pre-save hook
+  // Don't hash it manually to avoid double-hashing
 
   let user;
 
@@ -252,7 +251,7 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
         [
           {
             email: email.toLowerCase(),
-            password: hashedPassword,
+            password: password, // Let User model's pre-save hook hash it
             firstName,
             lastName,
             phone: phone || null,
@@ -280,7 +279,7 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     // Simple agent creation (independent)
     user = await User.create({
       email: email.toLowerCase(),
-      password: hashedPassword,
+      password: password, // Let User model's pre-save hook hash it
       firstName,
       lastName,
       phone: phone || null,
