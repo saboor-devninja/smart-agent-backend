@@ -12,10 +12,14 @@ exports.getForLease = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("leaseId is required", badRequest));
   }
 
+  // Platform admin can access all lease prerequisites without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const result = await LeasePrerequisiteService.getByLease(
     leaseId,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
@@ -37,6 +41,11 @@ exports.create = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("leaseId and title are required", badRequest));
   }
 
+  // Platform admin can access all lease prerequisites without filtering by agentId/agencyId
+  // But for creating, we still need an agentId (use the lease's agentId)
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const prerequisite = await LeasePrerequisiteService.create(
     leaseId,
     {
@@ -51,8 +60,8 @@ exports.create = tryCatchAsync(async (req, res, next) => {
       documentUrl,
       customType,
     },
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(

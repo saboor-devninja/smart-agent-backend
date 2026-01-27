@@ -253,7 +253,7 @@ class PropertyService {
       
       return property;
     });
-console.log("propertiesWithLandlords", propertiesWithLandlords);
+// console.log("propertiesWithLandlords", propertiesWithLandlords);
     return propertiesWithLandlords;
   }
 

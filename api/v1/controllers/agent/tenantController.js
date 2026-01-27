@@ -67,10 +67,14 @@ exports.getTenants = tryCatchAsync(async (req, res, next) => {
 });
 
 exports.getTenant = tryCatchAsync(async (req, res, next) => {
+  // Platform admin can access all tenants without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+  
   const tenant = await TenantService.getTenantById(
     req.params.id,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(res, { tenant }, "Tenant retrieved successfully", success);

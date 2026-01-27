@@ -26,9 +26,11 @@ exports.createLease = tryCatchAsync(async (req, res, next) => {
 });
 
 exports.getLeases = tryCatchAsync(async (req, res, next) => {
+  // Platform admin can access all leases without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+  
   const filters = {
-    agentId: req.user._id,
-    agencyId: req.user.agencyId || null,
     propertyId: req.query.propertyId,
     tenantId: req.query.tenantId,
     landlordId: req.query.landlordId,
@@ -38,7 +40,7 @@ exports.getLeases = tryCatchAsync(async (req, res, next) => {
     skip: req.query.skip,
   };
 
-  const result = await LeaseService.getLeases(filters.agentId, filters.agencyId, filters);
+  const result = await LeaseService.getLeases(agentId, agencyId, filters);
 
   return apiResponse.successResponse(
     res,
@@ -53,10 +55,14 @@ exports.getLeases = tryCatchAsync(async (req, res, next) => {
 });
 
 exports.getLeaseById = tryCatchAsync(async (req, res, next) => {
+  // Platform admin can access all leases without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+  
   const lease = await LeaseService.getLeaseById(
     req.params.id,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(res, { lease }, "Lease retrieved successfully", success);

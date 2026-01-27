@@ -366,11 +366,13 @@ class LeaseService {
   static async getLeases(agentId, agencyId, filters = {}) {
     const query = {};
 
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
     if (agencyId) {
       query.agencyId = agencyId;
-    } else {
+    } else if (agentId) {
       query.agentId = agentId;
     }
+    // If both are null, query without agentId/agencyId filter (PLATFORM_ADMIN case)
 
     if (filters.propertyId) {
       query.propertyId = filters.propertyId;
@@ -419,11 +421,13 @@ class LeaseService {
   static async getLeaseById(id, agentId, agencyId) {
     const query = { _id: id };
 
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
     if (agencyId) {
       query.agencyId = agencyId;
-    } else {
+    } else if (agentId) {
       query.agentId = agentId;
     }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
 
     const lease = await Lease.findOne(query)
       .populate("propertyId", "title address city state country rentAmount securityDeposit")

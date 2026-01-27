@@ -4,9 +4,16 @@ const AppError = require("../../../utils/appError");
 
 class LeasePrerequisiteService {
   static async getByLease(leaseId, agentId, agencyId) {
-    const lease = await Lease.findOne(
-      agencyId ? { _id: leaseId, agencyId } : { _id: leaseId, agentId }
-    ).lean();
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
+    const lease = await Lease.findOne(leaseQuery).lean();
 
     if (!lease) {
       throw new AppError("Lease not found", 404);
@@ -20,17 +27,27 @@ class LeasePrerequisiteService {
   }
 
   static async create(leaseId, data, agentId, agencyId) {
-    const lease = await Lease.findOne(
-      agencyId ? { _id: leaseId, agencyId } : { _id: leaseId, agentId }
-    ).lean();
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
+    const lease = await Lease.findOne(leaseQuery).lean();
 
     if (!lease) {
       throw new AppError("Lease not found", 404);
     }
 
+    // For PLATFORM_ADMIN, use the lease's agentId instead of null
+    const prerequisiteAgentId = agentId || lease.agentId;
+
     const prerequisite = await LeasePrerequisite.create({
       leaseId,
-      agentId,
+      agentId: prerequisiteAgentId,
       type: data.type || "CUSTOM",
       title: data.title,
       description: data.description || null,

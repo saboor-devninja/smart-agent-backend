@@ -13,7 +13,15 @@ const CommissionService = require("./commissionService");
 
 class LeasePaymentService {
   static async getByLease(leaseId, agentId, agencyId) {
-    const leaseQuery = agencyId ? { _id: leaseId, agencyId } : { _id: leaseId, agentId };
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
     const lease = await Lease.findOne(leaseQuery).lean();
 
     if (!lease) {
@@ -84,7 +92,15 @@ class LeasePaymentService {
   }
 
   static async create(leaseId, data, agentId, agencyId) {
-    const leaseQuery = agencyId ? { _id: leaseId, agencyId } : { _id: leaseId, agentId };
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
     const lease = await Lease.findOne(leaseQuery).lean();
 
     if (!lease) {
@@ -207,9 +223,15 @@ class LeasePaymentService {
       throw new AppError("Payment record not found", 404);
     }
 
-    const leaseQuery = agencyId
-      ? { _id: record.leaseId, agencyId }
-      : { _id: record.leaseId, agentId };
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: record.leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
     const lease = await Lease.findOne(leaseQuery).lean();
     if (!lease) {
       throw new AppError("Lease not found", 404);
@@ -409,9 +431,15 @@ class LeasePaymentService {
       throw new AppError("Payment record not found", 404);
     }
 
-    const leaseQuery = agencyId
-      ? { _id: record.leaseId, agencyId }
-      : { _id: record.leaseId, agentId };
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = { _id: record.leaseId };
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
+    
     const lease = await Lease.findOne(leaseQuery).lean();
     if (!lease) {
       throw new AppError("Lease not found", 404);
@@ -523,12 +551,16 @@ class LeasePaymentService {
       offset = 0,
     } = filters;
 
-    // Build lease query based on agent/agency
-    const leaseQuery = agencyId
-      ? { agencyId }
-      : { agentId };
+    // Build lease query based on agent/agency (null means PLATFORM_ADMIN - no filter)
+    const leaseQuery = {};
+    if (agencyId) {
+      leaseQuery.agencyId = agencyId;
+    } else if (agentId) {
+      leaseQuery.agentId = agentId;
+    }
+    // If both are null, query all leases (PLATFORM_ADMIN case)
 
-    // Get all leases for this agent/agency
+    // Get all leases for this agent/agency (or all if PLATFORM_ADMIN)
     const leases = await Lease.find(leaseQuery)
       .select("_id propertyId tenantId landlordId")
       .lean();

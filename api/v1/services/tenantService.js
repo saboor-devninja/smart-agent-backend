@@ -140,11 +140,13 @@ class TenantService {
   static async getTenantById(id, agentId, agencyId) {
     const query = { _id: id };
 
+    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
     if (agencyId) {
       query.agencyId = agencyId;
-    } else {
+    } else if (agentId) {
       query.agentId = agentId;
     }
+    // If both are null, query only by _id (PLATFORM_ADMIN case)
 
     const tenant = await Tenant.findOne(query)
       .populate("agentId", "firstName lastName email")

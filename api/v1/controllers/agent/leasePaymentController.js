@@ -11,10 +11,14 @@ exports.getByLease = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("leaseId is required", badRequest));
   }
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const result = await LeasePaymentService.getByLease(
     leaseId,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
@@ -39,11 +43,15 @@ exports.create = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("label and amountDue are required", badRequest));
   }
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const record = await LeasePaymentService.create(
     leaseId,
     req.body,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
@@ -61,11 +69,15 @@ exports.update = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("Payment record id is required", badRequest));
   }
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const record = await LeasePaymentService.update(
     id,
     req.body,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
@@ -83,10 +95,14 @@ exports.getByIdWithRelated = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("Payment record id is required", badRequest));
   }
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const result = await LeasePaymentService.getByIdWithRelated(
     id,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
@@ -126,9 +142,13 @@ exports.getAll = tryCatchAsync(async (req, res, next) => {
     offset: offset ? parseInt(offset) : 0,
   };
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const result = await LeasePaymentService.getAllPayments(
-    req.user._id,
-    req.user.agencyId || null,
+    agentId,
+    agencyId,
     filters
   );
 
@@ -147,10 +167,14 @@ exports.delete = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("Payment record id is required", badRequest));
   }
 
+  // Platform admin can access all lease payments without filtering by agentId/agencyId
+  const agentId = req.user.role === 'PLATFORM_ADMIN' ? null : req.user._id;
+  const agencyId = req.user.role === 'PLATFORM_ADMIN' ? null : (req.user.agencyId || null);
+
   const record = await LeasePaymentService.delete(
     id,
-    req.user._id,
-    req.user.agencyId || null
+    agentId,
+    agencyId
   );
 
   return apiResponse.successResponse(
