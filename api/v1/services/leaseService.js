@@ -323,7 +323,7 @@ class LeaseService {
       }
 
       const populatedLease = await Lease.findById(lease._id)
-        .populate("propertyId", "title address city state country")
+        .populate("propertyId", "title address city state country currency currencySymbol currencyLocale")
         .populate("tenantId", "firstName lastName email phoneNumber")
         .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
         .populate("agentId", "firstName lastName email")
@@ -430,7 +430,7 @@ class LeaseService {
     // If both are null, query only by _id (PLATFORM_ADMIN case)
 
     const lease = await Lease.findOne(query)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
@@ -665,7 +665,7 @@ class LeaseService {
     }
 
     const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
@@ -722,7 +722,7 @@ class LeaseService {
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
@@ -775,7 +775,7 @@ class LeaseService {
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
@@ -831,7 +831,7 @@ class LeaseService {
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")
@@ -870,7 +870,7 @@ class LeaseService {
     await this.updatePropertyAvailability(lease.propertyId);
 
     const populatedLease = await Lease.findById(lease._id)
-      .populate("propertyId", "title address city state country rentAmount securityDeposit")
+      .populate("propertyId", "title address city state country rentAmount securityDeposit currency currencySymbol currencyLocale")
       .populate("tenantId", "firstName lastName email phoneNumber")
       .populate("landlordId", "firstName lastName organizationName isOrganization contactPersonName")
       .populate("agentId", "firstName lastName email")

@@ -433,6 +433,7 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
           }
 
           // Mark commission as PAID when tenant payment is fully paid
+          // Agent commission is considered "earned/paid" when tenant pays rent
           await CommissionRecord.updateOne(
             { paymentRecordId: paymentRecord._id },
             {

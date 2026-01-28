@@ -59,23 +59,46 @@ class FinanceDashboardService {
       createdAt: { $gte: startOfMonth, $lte: endOfMonth },
     }).lean();
 
+    // Commission Metrics (Previous Month)
+    const startOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const commissionsPreviousMonth = await CommissionRecord.find({
+      agentId,
+      createdAt: { $gte: startOfPreviousMonth, $lte: endOfPreviousMonth },
+    }).lean();
+
     let commissionEarned = 0;
     let platformFeeDue = 0;
     let platformFeePaid = 0;
+    let platformFeePreviousMonth = 0;
     let netEarnings = 0;
 
+    // Current month calculations
     commissionsThisMonth.forEach((c) => {
       const gross = normalizeAmount(c.agentGrossCommission);
       const platformFee = normalizeAmount(c.agentPlatformFee);
       const net = normalizeAmount(c.agentNetCommission);
 
+      // Commission earned: Total gross commission
       commissionEarned += gross;
-      platformFeeDue += platformFee;
+      
+      // Net earnings: Agent earnings after platform fee (commission - platform fee)
       netEarnings += net;
 
-      if (c.status === "PAID") {
+      // Platform fee due: All platform fees from current month commissions
+      // Commissions are only created when tenant payment is PAID, so this shows platform fee for this month
+      platformFeeDue += platformFee;
+
+      // Platform fee paid: Only count platform fees that have been marked as paid
+      if (c.platformFeePaid === true) {
         platformFeePaid += platformFee;
       }
+    });
+
+    // Previous month platform fee calculation
+    commissionsPreviousMonth.forEach((c) => {
+      const platformFee = normalizeAmount(c.agentPlatformFee);
+      platformFeePreviousMonth += platformFee;
     });
 
     const Lease = require("../../../models/Lease");
@@ -158,6 +181,7 @@ class FinanceDashboardService {
         earned: commissionEarned,
         platformFeeDue,
         platformFeePaid,
+        platformFeePreviousMonth,
         netEarnings,
       },
       recentRentPayments: recentPaid.map(mapPayment),

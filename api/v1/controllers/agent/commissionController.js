@@ -137,3 +137,36 @@ exports.updateLandlordPayment = tryCatchAsync(async (req, res, next) => {
     success
   );
 });
+
+exports.markPlatformFeeAsPaid = tryCatchAsync(async (req, res, next) => {
+  // Only platform admin can mark platform fees as paid
+  if (req.user.role !== "PLATFORM_ADMIN") {
+    return next(new AppError("Only platform admin can mark platform fees as paid", badRequest));
+  }
+
+  const commissionRecordId = req.params.id;
+  const { paidDate, paymentMethod, paymentReference, notes } = req.body;
+
+  if (!commissionRecordId) {
+    return next(new AppError("commissionRecordId is required", badRequest));
+  }
+
+  const updatedCommission = await CommissionService.markPlatformFeeAsPaid(
+    commissionRecordId,
+    {
+      paidDate: paidDate ? new Date(paidDate) : new Date(),
+      paymentMethod,
+      paymentReference,
+      notes,
+    },
+    req.user._id,
+    req.user.role === "PLATFORM_ADMIN" // Pass platform admin flag
+  );
+
+  return apiResponse.successResponse(
+    res,
+    { commission: updatedCommission },
+    "Platform fee marked as paid successfully",
+    success
+  );
+});

@@ -10,7 +10,7 @@
   - `commissionFixedAmount` (fixed dollar amount)
   - `commissionFrequency` (WEEKLY, MONTHLY, etc.)
   - `commissionNotes` (additional terms)
-  - `platformFeePercentage` (default 20%, or 5% if no commission)
+  - `platformFeePercentage` (default 2%, or 5% if no commission)
 
 **This is just the CONFIGURATION** - it tells the system HOW to calculate commissions, but doesn't track actual commission earnings.
 
@@ -95,7 +95,7 @@ Tracks payments made to landlords.
 
 **When Rent is Paid**:
 1. Calculate agent commission from property settings
-2. Calculate platform fee (20% of commission, or 5% of rent if no commission)
+2. Calculate platform fee (2% of commission, or 5% of rent if no commission)
 3. Create AgentCommission record
 4. Create PlatformCommission record
 5. If agency agent: Create AgencyCommission record
@@ -131,11 +131,11 @@ Rent Payment (Tenant pays $1,000)
     ↓
 Calculate Commission (10% = $100)
     ↓
-Calculate Platform Fee (20% of $100 = $20)
+Calculate Platform Fee (2% of $100 = $2)
     ↓
 Create Records:
-    ├─ AgentCommission: $100 gross, $20 fee, $80 net
-    ├─ PlatformCommission: $20 collected
+    ├─ AgentCommission: $100 gross, $2 fee, $98 net
+    ├─ PlatformCommission: $2 collected
     └─ LandlordPayment: $1,000 - $100 = $900 to landlord
 ```
 

@@ -136,7 +136,20 @@ const propertySchema = new mongoose.Schema(
     commissionNotes: String,
     platformFeePercentage: {
       type: mongoose.Schema.Types.Decimal128,
-      default: "20.00",
+      default: "2.00",
+    },
+    // Currency settings (snapshot from agent at creation time)
+    currency: {
+      type: String,
+      default: "USD",
+    },
+    currencySymbol: {
+      type: String,
+      default: "$",
+    },
+    currencyLocale: {
+      type: String,
+      default: "en-US",
     },
     address: {
       type: String,

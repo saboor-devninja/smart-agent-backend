@@ -247,27 +247,33 @@ exports.importLandlordsAndProperties = tryCatchAsync(async (req, res, next) => {
         continue;
       }
 
-      await Property.create({
-        agentId: landlord.agentId || agentId,
-        landlordId: landlord._id,
-        agencyId: agencyId || null,
-        type: "OTHER",
-        title: propertyTitle,
-        description: null,
-        bedrooms: 0,
-        bathrooms: 0,
-        area,
-        areaUnit: propertyAreaUnit === "SQ_M" ? "SQ_M" : "SQ_FT",
-        furnished: false,
-        isAvailable: true,
-        rentAmount: rentAmount !== null ? rentAmount : undefined,
-        rentalCycle: "MONTHLY",
-        address: propertyAddress,
-        city: propertyCity || null,
-        state: propertyState || null,
-        zipCode: propertyPostalCode || null,
-        country: propertyCountry || landlordCountry || null,
-      });
+      // Use PropertyService to ensure currency is properly set
+      const PropertyService = require("../../services/propertyService");
+      await PropertyService.createProperty(
+        {
+          landlordId: landlord._id,
+          type: "OTHER",
+          title: propertyTitle,
+          description: null,
+          bedrooms: 0,
+          bathrooms: 0,
+          area,
+          areaUnit: propertyAreaUnit === "SQ_M" ? "SQ_M" : "SQ_FT",
+          furnished: false,
+          isAvailable: true,
+          rentAmount: rentAmount !== null ? rentAmount : undefined,
+          rentalCycle: "MONTHLY",
+          address: propertyAddress,
+          city: propertyCity || null,
+          state: propertyState || null,
+          zipCode: propertyPostalCode || null,
+          country: propertyCountry || landlordCountry || null,
+        },
+        landlord.agentId || agentId,
+        agencyId || null,
+        [], // utilities
+        [] // media files
+      );
 
       createdProperties++;
       rowResults.push({

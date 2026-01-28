@@ -109,7 +109,7 @@ class CommissionService {
     } else {
       // Individual Agent: Platform fee is calculated on agent commission
       // Issue 3: Clamp platform fee percentage and ensure it doesn't exceed commission
-      let platformFeePercentage = Number(property.platformFeePercentage || 20);
+      let platformFeePercentage = Number(property.platformFeePercentage || 2);
       if (platformFeePercentage < 0) platformFeePercentage = 0;
       if (platformFeePercentage > 100) platformFeePercentage = 100;
       
@@ -359,7 +359,7 @@ class CommissionService {
       // Issue 12: Use stored settings if available
       const platformFeePercentage = useStoredSettings && existingCommission.commissionSettings?.propertyPlatformFeePercentage
         ? Number(existingCommission.commissionSettings.propertyPlatformFeePercentage)
-        : Number(property.platformFeePercentage || 20);
+        : Number(property.platformFeePercentage || 2);
 
       // Issue 3: Clamp platform fee percentage and ensure it doesn't exceed commission
       let platformFeePct = platformFeePercentage;
@@ -546,7 +546,7 @@ class CommissionService {
 
     const commissions = await CommissionRecord.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
-      .populate("propertyId", "title address")
+      .populate("propertyId", "title address currency currencySymbol currencyLocale")
       .populate("paymentRecordId", "label type dueDate")
       .populate("agentId", "firstName lastName email")
       .sort({ createdAt: -1 })
@@ -563,6 +563,12 @@ class CommissionService {
       agencyNetCommission: Number(c.agencyNetCommission || 0),
       platformCommission: Number(c.platformCommission || 0),
       landlordNetAmount: Number(c.landlordNetAmount || 0),
+      // Include platform fee payment tracking fields
+      platformFeePaid: c.platformFeePaid || false,
+      platformFeePaidDate: c.platformFeePaidDate || null,
+      platformFeePaymentMethod: c.platformFeePaymentMethod || null,
+      platformFeePaymentReference: c.platformFeePaymentReference || null,
+      platformFeePaymentNotes: c.platformFeePaymentNotes || null,
     }));
   }
 
@@ -586,7 +592,7 @@ class CommissionService {
 
     const commissions = await CommissionRecord.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
-      .populate("propertyId", "title address")
+      .populate("propertyId", "title address currency currencySymbol currencyLocale")
       .populate("paymentRecordId", "label type dueDate")
       .populate("agentId", "firstName lastName email")
       .sort({ createdAt: -1 })
@@ -603,6 +609,12 @@ class CommissionService {
       agencyNetCommission: Number(c.agencyNetCommission || 0),
       platformCommission: Number(c.platformCommission || 0),
       landlordNetAmount: Number(c.landlordNetAmount || 0),
+      // Include platform fee payment tracking fields
+      platformFeePaid: c.platformFeePaid || false,
+      platformFeePaidDate: c.platformFeePaidDate || null,
+      platformFeePaymentMethod: c.platformFeePaymentMethod || null,
+      platformFeePaymentReference: c.platformFeePaymentReference || null,
+      platformFeePaymentNotes: c.platformFeePaymentNotes || null,
     }));
   }
 
@@ -623,7 +635,7 @@ class CommissionService {
 
     const payments = await LandlordPayment.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
-      .populate("propertyId", "title address")
+      .populate("propertyId", "title address currency currencySymbol currencyLocale")
       .populate("paymentRecordId", "label type dueDate")
       .sort({ createdAt: -1 })
       .lean();
@@ -682,6 +694,41 @@ class CommissionService {
     await landlordPayment.save();
 
     return landlordPayment.toObject();
+  }
+
+  static async markPlatformFeeAsPaid(commissionRecordId, data, agentId, isPlatformAdmin = false) {
+    const CommissionRecord = require("../../../models/CommissionRecord");
+    
+    const commission = await CommissionRecord.findById(commissionRecordId);
+    if (!commission) {
+      throw new AppError("Commission record not found", 404);
+    }
+
+    // Verify ownership - agent can only mark their own platform fees as paid
+    // Platform admin can mark any platform fee as paid
+    if (!isPlatformAdmin && commission.agentId.toString() !== agentId.toString()) {
+      throw new AppError("You can only mark your own platform fees as paid", 403);
+    }
+
+    // Check if platform fee exists - check both agentPlatformFee and platformCommission
+    const agentPlatformFee = Number(commission.agentPlatformFee || 0);
+    const platformCommission = Number(commission.platformCommission || 0);
+    const platformFee = agentPlatformFee > 0 ? agentPlatformFee : platformCommission;
+    
+    if (platformFee === 0) {
+      throw new AppError("No platform fee to mark as paid", 400);
+    }
+
+    // Update platform fee payment fields
+    commission.platformFeePaid = true;
+    commission.platformFeePaidDate = data.paidDate || new Date();
+    commission.platformFeePaymentMethod = data.paymentMethod || null;
+    commission.platformFeePaymentReference = data.paymentReference || null;
+    commission.platformFeePaymentNotes = data.notes || null;
+
+    await commission.save();
+
+    return commission.toObject();
   }
 }
 

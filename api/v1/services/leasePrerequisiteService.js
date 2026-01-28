@@ -100,7 +100,7 @@ class LeasePrerequisiteService {
       leaseId: lease._id,
       agentId,
       type: "FIRST_MONTH_RENT_PAID",
-      title: "First month rent paid",
+      title: "First month's rent",
       description: "Confirm the first month rent has been received before starting the lease.",
       isRequired: true,
       isCompleted: false,

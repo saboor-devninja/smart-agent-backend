@@ -6,7 +6,7 @@ const {
   getProperties, 
   getProperty, 
   updateProperty, 
-  deleteProperty 
+  deleteProperty
 } = require("../../controllers/agent/propertyController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { checkResourceOwnership } = require("../../middleware/authorize");

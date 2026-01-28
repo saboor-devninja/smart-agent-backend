@@ -68,7 +68,10 @@ class PropertyDTO {
     propertyData.commissionFixedAmount = property.commissionFixedAmount ? parseFloat(property.commissionFixedAmount.toString()) : null;
     propertyData.commissionFrequency = property.commissionFrequency || null;
     propertyData.commissionNotes = property.commissionNotes || null;
-    propertyData.platformFeePercentage = property.platformFeePercentage ? parseFloat(property.platformFeePercentage.toString()) : 20.0;
+    propertyData.platformFeePercentage = property.platformFeePercentage ? parseFloat(property.platformFeePercentage.toString()) : 2.0;
+    propertyData.currency = property.currency || null;
+    propertyData.currencySymbol = property.currencySymbol || null;
+    propertyData.currencyLocale = property.currencyLocale || null;
     propertyData.address = property.address;
     propertyData.city = property.city || null;
     propertyData.state = property.state || null;

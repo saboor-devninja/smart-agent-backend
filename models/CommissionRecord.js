@@ -103,6 +103,27 @@ const commissionRecordSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Platform fee payment tracking
+    platformFeePaid: {
+      type: Boolean,
+      default: false,
+    },
+    platformFeePaidDate: {
+      type: Date,
+      default: null,
+    },
+    platformFeePaymentMethod: {
+      type: String,
+      default: null,
+    },
+    platformFeePaymentReference: {
+      type: String,
+      default: null,
+    },
+    platformFeePaymentNotes: {
+      type: String,
+      default: null,
+    },
     notes: String,
   },
   {

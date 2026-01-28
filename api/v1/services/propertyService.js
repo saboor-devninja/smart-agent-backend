@@ -2,6 +2,7 @@ const Property = require("../../../models/Property");
 const PropertyUtility = require("../../../models/PropertyUtility");
 const PropertyMedia = require("../../../models/PropertyMedia");
 const Landlord = require("../../../models/Landlord");
+const User = require("../../../models/User");
 const AppError = require("../../../utils/appError");
 const { uploadFile, generatePropertyMediaPath, deleteFile } = require("../../../utils/s3");
 const { formatDateForStorage } = require("../../../utils/dateUtils");
@@ -18,9 +19,15 @@ class PropertyService {
       propertyAgentId = landlord.agentId;
     }
 
+    // Fetch agent's currency settings to snapshot at property creation
+    const agent = await User.findById(propertyAgentId).select('currency currencySymbol currencyLocale').lean();
+    const currency = data.currency || agent?.currency || 'USD';
+    const currencySymbol = data.currencySymbol || agent?.currencySymbol || '$';
+    const currencyLocale = data.currencyLocale || agent?.currencyLocale || 'en-US';
+
     const platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
       ? 5.0 
-      : 20.0;
+      : 2.0;
     const propertyData = {
       agentId: propertyAgentId,
       landlordId: data.landlordId,
@@ -54,6 +61,9 @@ class PropertyService {
       commissionFrequency: data.commissionFrequency || null,
       commissionNotes: data.commissionNotes || null,
       platformFeePercentage: platformFeePercentage,
+      currency: currency,
+      currencySymbol: currencySymbol,
+      currencyLocale: currencyLocale,
       address: data.address,
       city: data.city || null,
       state: data.state || null,
@@ -174,11 +184,11 @@ class PropertyService {
       landlordMap[landlord._id] = landlord;
     });
 
-    // Fetch and populate agent data
+    // Fetch and populate agent data (including currency for backward compatibility)
     const agentIds = [...new Set(properties.map(p => p.agentId).filter(Boolean))];
     const User = require("../../../models/User");
     const agents = await User.find({ _id: { $in: agentIds } })
-      .select('_id firstName lastName email')
+      .select('_id firstName lastName email currency currencySymbol currencyLocale')
       .lean();
 
     const agentMap = {};
@@ -259,6 +269,13 @@ class PropertyService {
       const agent = agentMap[property.agentId];
       if (agent) {
         property.agentId = agent;
+        
+        // Backward compatibility: populate currency from agent if property doesn't have it
+        if (!property.currency && agent.currency) {
+          property.currency = agent.currency;
+          property.currencySymbol = agent.currencySymbol || '$';
+          property.currencyLocale = agent.currencyLocale || 'en-US';
+        }
       }
       
       property.utilities = utilitiesMap[property._id] || [];
@@ -439,7 +456,7 @@ class PropertyService {
     if (data.commissionType !== undefined) {
       updateData.platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
         ? 5.0 
-        : 20.0;
+        : 2.0;
     }
 
     const updatedProperty = await Property.findByIdAndUpdate(
@@ -548,6 +565,7 @@ class PropertyService {
     await Property.findByIdAndDelete(propertyId);
     return true;
   }
+
 }
 
 module.exports = PropertyService;

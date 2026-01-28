@@ -318,6 +318,7 @@ class LeasePaymentService {
         }
 
         // Mark commission as PAID when tenant payment is fully paid
+        // Agent commission is considered "earned/paid" when tenant pays rent
         await CommissionRecord.updateOne(
           { paymentRecordId: record._id },
           {
@@ -648,7 +649,7 @@ class LeasePaymentService {
 
     const [properties, tenants, landlords] = await Promise.all([
       Property.find({ _id: { $in: propertyIds } })
-        .select("_id title address city")
+        .select("_id title address city currency currencySymbol currencyLocale")
         .lean(),
       Tenant.find({ _id: { $in: tenantIds } })
         .select("_id firstName lastName email")
