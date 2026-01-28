@@ -5,18 +5,34 @@ class PropertyDTO {
     propertyData._id = property._id;
     propertyData.docNumber = property.docNumber || null;
     
-    // Store only ID strings, not populated objects (null-safe)
-    propertyData.agentId = (property.agentId && typeof property.agentId === 'object' && property.agentId._id) ? property.agentId._id : (property.agentId || null);
-    propertyData.landlordId = (property.landlordId && typeof property.landlordId === 'object' && property.landlordId._id) ? property.landlordId._id : (property.landlordId || null);
+    // Include agent object if populated, otherwise just the ID
+    if (property.agentId && typeof property.agentId === 'object' && property.agentId._id) {
+      propertyData.agentId = {
+        _id: property.agentId._id,
+        firstName: property.agentId.firstName || null,
+        lastName: property.agentId.lastName || null,
+        email: property.agentId.email || null,
+      };
+      propertyData.agentName = `${property.agentId.firstName || ''} ${property.agentId.lastName || ''}`.trim() || null;
+      propertyData.agentEmail = property.agentId.email || null;
+    } else {
+      propertyData.agentId = property.agentId || null;
+      propertyData.agentName = null;
+      propertyData.agentEmail = null;
+    }
+    
+    // Store landlord object reference before converting landlordId to string
+    const landlordObject = (property.landlordId && typeof property.landlordId === 'object') ? property.landlordId : null;
+    
+    propertyData.landlordId = landlordObject ? landlordObject._id : (property.landlordId || null);
     propertyData.agencyId = (property.agencyId && typeof property.agencyId === 'object' && property.agencyId._id) ? property.agencyId._id : (property.agencyId || null);
 
     // Extract landlord name from populated object if available
-    if (property.landlordId && typeof property.landlordId === 'object') {
-      const landlord = property.landlordId;
-      if (landlord.isOrganization && landlord.organizationName) {
-        propertyData.landlordName = landlord.organizationName;
-      } else if (landlord.firstName || landlord.lastName) {
-        propertyData.landlordName = `${landlord.firstName || ''} ${landlord.lastName || ''}`.trim();
+    if (landlordObject) {
+      if (landlordObject.isOrganization && landlordObject.organizationName) {
+        propertyData.landlordName = landlordObject.organizationName;
+      } else if (landlordObject.firstName || landlordObject.lastName) {
+        propertyData.landlordName = `${landlordObject.firstName || ''} ${landlordObject.lastName || ''}`.trim();
       } else {
         propertyData.landlordName = 'Unknown Landlord';
       }
@@ -90,9 +106,9 @@ class PropertyDTO {
     }
 
     // Full landlord DTO object (no duplication - landlordId is already just the ID string above)
-    if (property.landlordId && typeof property.landlordId === 'object') {
+    if (landlordObject) {
       const LandlordDTO = require("./LandlordDTO");
-      propertyData.landlord = LandlordDTO.setDTO(property.landlordId);
+      propertyData.landlord = LandlordDTO.setDTO(landlordObject);
     } else {
       propertyData.landlord = null;
     }

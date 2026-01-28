@@ -174,6 +174,18 @@ class PropertyService {
       landlordMap[landlord._id] = landlord;
     });
 
+    // Fetch and populate agent data
+    const agentIds = [...new Set(properties.map(p => p.agentId).filter(Boolean))];
+    const User = require("../../../models/User");
+    const agents = await User.find({ _id: { $in: agentIds } })
+      .select('_id firstName lastName email')
+      .lean();
+
+    const agentMap = {};
+    agents.forEach(agent => {
+      agentMap[agent._id] = agent;
+    });
+
     const propertyIds = properties.map(p => p._id);
 
     const utilities = await PropertyUtility.find({ propertyId: { $in: propertyIds } }).lean();
@@ -242,6 +254,13 @@ class PropertyService {
       if (landlord) {
         property.landlordId = landlord;
       }
+      
+      // Attach agent object if available
+      const agent = agentMap[property.agentId];
+      if (agent) {
+        property.agentId = agent;
+      }
+      
       property.utilities = utilitiesMap[property._id] || [];
       property.leases = leasesMap[property._id] || [];
       property.activeLeasesCount = (leasesMap[property._id] || []).filter(l => l.status === 'ACTIVE').length;

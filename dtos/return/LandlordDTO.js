@@ -7,8 +7,19 @@ class LandlordDTO {
     landlordData._id = landlord._id;
     landlordData.docNumber = landlord.docNumber || null;
     
-    // Store only ID strings, not populated objects (null-safe)
-    landlordData.agentId = (landlord.agentId && typeof landlord.agentId === 'object' && landlord.agentId._id) ? landlord.agentId._id : (landlord.agentId || null);
+    // Include agent object if populated, otherwise just the ID
+    if (landlord.agentId && typeof landlord.agentId === 'object' && landlord.agentId._id) {
+      landlordData.agentId = {
+        _id: landlord.agentId._id,
+        firstName: landlord.agentId.firstName || null,
+        lastName: landlord.agentId.lastName || null,
+        email: landlord.agentId.email || null,
+      };
+    } else {
+      landlordData.agentId = landlord.agentId || null;
+    }
+    
+    // Store only ID strings for agencyId
     landlordData.agencyId = (landlord.agencyId && typeof landlord.agencyId === 'object' && landlord.agencyId._id) ? landlord.agencyId._id : (landlord.agencyId || null);
     landlordData.isOrganization = landlord.isOrganization !== undefined ? landlord.isOrganization : false;
     landlordData.organizationName = landlord.organizationName || null;
