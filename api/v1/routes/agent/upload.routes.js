@@ -17,6 +17,7 @@ const upload = multer({
   },
 });
 
+// All uploads require authentication
 router.use(isLoggedIn);
 
 router.post("/", upload.single("file"), async (req, res) => {
@@ -39,7 +40,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     let result;
 
     switch (uploadType) {
-      case "landlord-profile":
+      case "landlord-profile": {
         if (!entityId) {
           return res
             .status(400)
@@ -62,8 +63,9 @@ router.post("/", upload.single("file"), async (req, res) => {
         const profilePath = generateLandlordProfilePath(entityId);
         result = await uploadFile(req.file, profilePath);
         break;
+      }
 
-      case "user-profile":
+      case "user-profile": {
         if (!entityId) {
           return res.status(400).json({ error: "User ID is required" });
         }
@@ -84,8 +86,9 @@ router.post("/", upload.single("file"), async (req, res) => {
         const userProfilePath = generateUserProfilePath(entityId);
         result = await uploadFile(req.file, userProfilePath);
         break;
+      }
 
-      case "generic":
+      case "generic": {
         // Generic file upload for attachments (emails, etc.)
         // Sanitize filename to remove special characters
         const sanitizedFilename = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
@@ -93,6 +96,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         const genericPath = `uploads/generic/${Date.now()}-${sanitizedFilename.replace(/\.[^/.]+$/, "")}`;
         result = await uploadFile(req.file, genericPath);
         break;
+      }
 
       default:
         return res.status(400).json({ error: "Invalid upload type" });
@@ -112,4 +116,5 @@ router.post("/", upload.single("file"), async (req, res) => {
 });
 
 module.exports = router;
+
 
