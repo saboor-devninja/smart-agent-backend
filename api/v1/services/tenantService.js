@@ -53,13 +53,11 @@ class TenantService {
   static async getTenants(agentId, agencyId, filters = {}) {
     const query = {};
 
-    // For platform admin (agentId and agencyId are null), don't filter by agent/agency
-    if (agentId !== null && agencyId !== null) {
-      if (agencyId) {
-        query.agencyId = agencyId;
-      } else {
-        query.agentId = agentId;
-      }
+    if (agentId === null && agencyId === null) {
+    } else if (agencyId !== null) {
+      query.agencyId = agencyId;
+    } else if (agentId !== null) {
+      query.agentId = agentId;
     }
 
     if (filters.city) {
@@ -93,7 +91,6 @@ class TenantService {
 
     const TenantRating = require("../../../models/TenantRating");
 
-    // Use Promise.allSettled to handle individual failures gracefully
     const tenantsWithRelationsResults = await Promise.allSettled(
       tenants.map(async (tenant) => {
         try {
@@ -115,7 +112,6 @@ class TenantService {
             ratings: ratings || [],
           };
         } catch (error) {
-          // Log error but return tenant with empty arrays
           console.error(`Error loading relations for tenant ${tenant._id}:`, error);
           return {
             ...tenant,
@@ -140,7 +136,6 @@ class TenantService {
   static async getTenantById(id, agentId, agencyId) {
     const query = { _id: id };
 
-    // Only filter by agentId/agencyId if provided (null means PLATFORM_ADMIN - no filter)
     if (agencyId) {
       query.agencyId = agencyId;
     } else if (agentId) {
@@ -164,14 +159,13 @@ class TenantService {
       .select("_id status startDate endDate propertyId rentAmount")
       .lean();
 
-    // Fix N+1 query: Batch fetch all properties at once
     const propertyIds = leases
       .map((lease) => lease.propertyId)
       .filter((id) => id != null);
     
     const properties = propertyIds.length > 0
       ? await Property.find({ _id: { $in: propertyIds } })
-          .select("_id title address city")
+          .select("_id title address city currency currencySymbol currencyLocale")
           .lean()
       : [];
     
@@ -196,7 +190,6 @@ class TenantService {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Calculate payment statistics
     const LeasePaymentRecord = require("../../../models/LeasePaymentRecord");
     const leaseIds = leasesWithProperties.map((l) => l._id);
 
@@ -222,7 +215,6 @@ class TenantService {
         .sort({ dueDate: 1 })
         .lean();
 
-      // Calculate total paid (sum of amountPaid for PAID records)
       const paidPayments = allPayments.filter((p) => p.status === "PAID");
       totalPaid = paidPayments.reduce(
         (sum, p) => sum + normalizeAmount(p.amountPaid || p.amountDue),
@@ -238,7 +230,6 @@ class TenantService {
         0
       );
 
-      // Find next payment (earliest unpaid payment with dueDate >= today)
       const now = new Date();
       const upcomingPayments = allPayments.filter(
         (p) =>
@@ -466,7 +457,6 @@ class TenantService {
     } else {
       tenant.kycVerifiedAt = null;
       tenant.kycVerifiedBy = null;
-      // Clear checklist when status is not VERIFIED
       if (kycStatus === "PENDING") {
         tenant.kycChecklist = [];
       }

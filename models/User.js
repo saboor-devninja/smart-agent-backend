@@ -104,6 +104,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: 'en-US',
     },
+    currencySet: {
+      type: Boolean,
+      default: false,
+    },
     emailVerified: {
       type: Boolean,
       default: false,

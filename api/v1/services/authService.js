@@ -17,6 +17,9 @@ class AuthService {
       phone,
       city,
       country,
+      currency,
+      currencySymbol,
+      currencyLocale,
       companyName,
       companyRegistration,
       companyAddress,
@@ -30,7 +33,6 @@ class AuthService {
       throw new AppError("Email already exists", 400);
     }
 
-    // Create user and mark email as verified (no OTP flow)
     const user = await User.create({
       email: email.toLowerCase(),
       password,
@@ -42,6 +44,10 @@ class AuthService {
       phone: phone || null,
       city: city || null,
       country: country || null,
+      currency: currency && currency.trim() ? currency.trim().toUpperCase() : "USD",
+      currencySymbol: currencySymbol && currencySymbol.trim() ? currencySymbol.trim() : "$",
+      currencyLocale: currencyLocale && currencyLocale.trim() ? currencyLocale.trim() : "en-US",
+      currencySet: currency && currency.trim() ? true : false,
       companyName: companyName || null,
       companyRegistration: companyRegistration || null,
       companyAddress: companyAddress || null,
@@ -53,8 +59,6 @@ class AuthService {
     });
 
     user.password = undefined;
-
-    // Return token so user can log in immediately
     const token = signToken(user._id, user.role);
 
     return {
@@ -157,7 +161,6 @@ class AuthService {
       throw new AppError("An agency with this email already exists", 400);
     }
 
-    // Check if admin user email already exists
     const existingUser = await User.findOne({
       email: agencyAdmin.email.toLowerCase(),
     });
@@ -166,12 +169,10 @@ class AuthService {
       throw new AppError("A user with this email already exists", 400);
     }
 
-    // Create agency and admin user in a transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // 1. Create Agency
       const agency = await Agency.create(
         [
           {
@@ -194,8 +195,6 @@ class AuthService {
       );
 
       const createdAgency = Array.isArray(agency) ? agency[0] : agency;
-
-      // 2. Create Agency Admin User linked to the agency
       const user = await User.create(
         [
           {
@@ -205,6 +204,10 @@ class AuthService {
             phone: agencyAdmin.phone,
             city: agencyAdmin.city,
             country: agencyAdmin.country,
+            currency: agencyAdmin.currency && agencyAdmin.currency.trim() ? agencyAdmin.currency.trim().toUpperCase() : "USD",
+            currencySymbol: agencyAdmin.currencySymbol && agencyAdmin.currencySymbol.trim() ? agencyAdmin.currencySymbol.trim() : "$",
+            currencyLocale: agencyAdmin.currencyLocale && agencyAdmin.currencyLocale.trim() ? agencyAdmin.currencyLocale.trim() : "en-US",
+            currencySet: agencyAdmin.currency && agencyAdmin.currency.trim() ? true : false,
             password: password,
             role: "AGENCY_ADMIN",
             isIndependent: false,

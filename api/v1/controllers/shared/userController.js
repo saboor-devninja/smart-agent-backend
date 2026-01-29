@@ -38,7 +38,8 @@ exports.updateProfile = tryCatchAsync(async (req, res, next) => {
     req.user._id,
     parsedBody,
     profilePictureFile,
-    companyLogoFile
+    companyLogoFile,
+    req.user.role === "PLATFORM_ADMIN" // Pass platform admin flag
   );
 
   const userData = UserDTO.setDTO(user);

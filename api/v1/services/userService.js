@@ -3,7 +3,7 @@ const AppError = require("../../../utils/appError");
 const { uploadFile, deleteFile, generateUserProfilePath } = require("../../../utils/s3");
 
 class UserService {
-  static async updateProfile(userId, data, profilePictureFile, companyLogoFile) {
+  static async updateProfile(userId, data, profilePictureFile, companyLogoFile, isPlatformAdmin = false) {
     const user = await User.findById(userId);
 
     if (!user) {
@@ -18,9 +18,24 @@ class UserService {
     if (data.phone !== undefined) updateData.phone = data.phone || null;
     if (data.city !== undefined) updateData.city = data.city || null;
     if (data.country !== undefined) updateData.country = data.country || null;
-    if (data.currency !== undefined) updateData.currency = data.currency || "USD";
-    if (data.currencySymbol !== undefined) updateData.currencySymbol = data.currencySymbol || "$";
-    if (data.currencyLocale !== undefined) updateData.currencyLocale = data.currencyLocale || "en-US";
+    
+    // Currency can only be changed if:
+    // 1. Currency has not been set yet (currencySet === false), OR
+    // 2. Platform admin is making the change
+    if (data.currency !== undefined || data.currencySymbol !== undefined || data.currencyLocale !== undefined) {
+      if (user.currencySet && !isPlatformAdmin) {
+        throw new AppError("Currency cannot be changed after it has been set. Please contact platform admin.", 400);
+      }
+      
+      if (data.currency !== undefined) updateData.currency = data.currency || "USD";
+      if (data.currencySymbol !== undefined) updateData.currencySymbol = data.currencySymbol || "$";
+      if (data.currencyLocale !== undefined) updateData.currencyLocale = data.currencyLocale || "en-US";
+      
+      // Mark currency as set when it's being updated
+      if (!user.currencySet) {
+        updateData.currencySet = true;
+      }
+    }
 
     if (user.role === "AGENT") {
       if (data.companyName !== undefined) updateData.companyName = data.companyName || null;

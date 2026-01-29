@@ -26,8 +26,8 @@ class PropertyService {
     const currencyLocale = data.currencyLocale || agent?.currencyLocale || 'en-US';
 
     const platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
-      ? 5.0 
-      : 2.0;
+      ? 2.0 
+      : 20.0;
     const propertyData = {
       agentId: propertyAgentId,
       landlordId: data.landlordId,
@@ -455,8 +455,8 @@ class PropertyService {
     // Update platform fee if commission type changes
     if (data.commissionType !== undefined) {
       updateData.platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
-        ? 5.0 
-        : 2.0;
+        ? 2.0 
+        : 20.0;
     }
 
     const updatedProperty = await Property.findByIdAndUpdate(

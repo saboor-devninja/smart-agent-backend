@@ -17,12 +17,14 @@ exports.signup = tryCatchAsync(async (req, res, next) => {
     return next(new AppError(validation.errors.join(", "), badRequest));
   }
 
-  // Extract additional fields that might be in the request
   const signupData = {
     ...validation.data,
     phone: req.body.phone || null,
     city: req.body.city || null,
     country: req.body.country || null,
+    currency: req.body.currency || null,
+    currencySymbol: req.body.currencySymbol || null,
+    currencyLocale: req.body.currencyLocale || null,
     companyName: req.body.companyName || null,
     companyRegistration: req.body.companyRegistration || null,
     companyAddress: req.body.companyAddress || null,
@@ -200,7 +202,6 @@ exports.verifyEmailOTP = tryCatchAsync(async (req, res, next) => {
     return next(new AppError(result.message, badRequest));
   }
 
-  // Mark user as verified (if exists)
   const user = await User.findOne({ email: email.toLowerCase() });
   if (user) {
     user.emailVerified = true;
@@ -208,15 +209,12 @@ exports.verifyEmailOTP = tryCatchAsync(async (req, res, next) => {
     await user.save();
   }
 
-  // Mark agency as verified (if exists and email matches)
   const agency = await Agency.findOne({ email: email.toLowerCase() });
   if (agency) {
     agency.emailVerified = true;
     agency.emailVerifiedAt = new Date();
     await agency.save();
   }
-
-  // Clean up OTP record
   await OtpService.deleteOTPRecords(email.toLowerCase(), "EMAIL_VERIFICATION");
 
   return apiResponse.successResponse(
@@ -240,7 +238,6 @@ exports.resendEmailOTP = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("User not found", 404));
   }
 
-  // Check if already verified
   if (user.emailVerified) {
     return next(new AppError("Email is already verified", badRequest));
   }
@@ -267,7 +264,6 @@ exports.signupAgency = tryCatchAsync(async (req, res, next) => {
     agencyLogo,
   } = req.body;
 
-  // Validate required fields
   if (!agencyInfo || !agencyAdmin || !password) {
     return next(
       new AppError("Agency info, admin info, and password are required", badRequest)
@@ -284,11 +280,12 @@ exports.signupAgency = tryCatchAsync(async (req, res, next) => {
     !agencyAdmin.email ||
     !agencyAdmin.phone ||
     !agencyAdmin.city ||
-    !agencyAdmin.country
+    !agencyAdmin.country ||
+    !agencyAdmin.currency
   ) {
     return next(
       new AppError(
-        "Admin first name, last name, email, phone, city, and country are required",
+        "Admin first name, last name, email, phone, city, country, and currency are required",
         badRequest
       )
     );

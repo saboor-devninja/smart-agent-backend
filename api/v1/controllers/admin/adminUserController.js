@@ -15,7 +15,6 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
     return next(new AppError('Only platform admins can access this endpoint', 403));
   }
 
-  // Get query parameters for filtering and pagination
   const {
     role,
     isActive,
@@ -26,12 +25,8 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
     sortOrder = 'desc',
   } = req.query;
 
-  // Build filter object
   const filter = {};
 
-  // By default, admin "Users" list should show only agents and agency admins
-  // (platform admins / moderators are managed separately).
-  // Allow overriding via ?role= if needed.
   if (role) {
     filter.role = role;
   } else {
@@ -50,27 +45,19 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
       { email: { $regex: search, $options: 'i' } },
     ];
     
-    // If we already have a role filter, we need to combine $or with it
-    // MongoDB will AND the $or with other root-level fields
     filter.$or = searchConditions;
   }
-  
-  // Debug: log the filter to help troubleshoot
-  console.log('[Admin Users] Filter:', JSON.stringify(filter, null, 2));
 
-  // Calculate pagination
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  // Build sort object
   const sort = {};
   sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
-  // Fetch users with pagination
   const [users, total] = await Promise.all([
     User.find(filter)
-      .select('-password') // Exclude password
+      .select('-password')
       .populate('agencyId', 'name')
       .sort(sort)
       .skip(skip)
@@ -78,14 +65,8 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
       .lean(),
     User.countDocuments(filter),
   ]);
-  
-  // Debug: log results
-  console.log('[Admin Users] Found users:', users.length, 'Total:', total);
-  if (users.length > 0) {
-    console.log('[Admin Users] Sample user roles:', users.slice(0, 3).map(u => ({ email: u.email, role: u.role })));
-  }
 
-  // Transform users to include agency name
+
   const transformedUsers = users.map(user => ({
     _id: user._id,
     firstName: user.firstName,
@@ -94,6 +75,10 @@ exports.getAllUsers = tryCatchAsync(async (req, res, next) => {
     phone: user.phone,
     city: user.city,
     country: user.country,
+    currency: user.currency,
+    currencySymbol: user.currencySymbol,
+    currencyLocale: user.currencyLocale,
+    currencySet: user.currencySet,
     profilePicture: user.profilePicture,
     role: user.role,
     isActive: user.isActive,
@@ -159,6 +144,9 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     phone,
     city,
     country,
+    currency,
+    currencySymbol,
+    currencyLocale,
     role,
     agencyId,
     isIndependent,
@@ -166,10 +154,10 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
   } = req.body;
 
   // Validation
-  if (!firstName || !lastName || !email || !password || !role) {
+  if (!firstName || !lastName || !email || !password || !role || !currency) {
     return next(
       new AppError(
-        "First name, last name, email, password, and role are required",
+        "First name, last name, email, password, role, and currency are required",
         400
       )
     );
@@ -180,9 +168,6 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     return next(new AppError("Role must be AGENT or AGENCY_ADMIN", 400));
   }
 
-  // For agency creation from admin panel, we behave like signup:
-  // - Create a new Agency
-  // - Create an AGENCY_ADMIN user linked to that agency
   if (role === "AGENCY_ADMIN") {
     if (!agencyName) {
       return next(
@@ -198,24 +183,18 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     agencyId = null;
   }
 
-  // Check if user email already exists
   const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
     return next(new AppError("User with this email already exists", 400));
   }
 
-  // Password will be hashed by User model's pre-save hook
-  // Don't hash it manually to avoid double-hashing
-
   let user;
 
   if (role === "AGENCY_ADMIN") {
-    // Create Agency + Agency Admin user in a transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // Ensure agency email is unique as well
       const existingAgency = await Agency.findOne(
         { email: email.toLowerCase() },
         null,
@@ -257,6 +236,10 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
             phone: phone || null,
             city: city || null,
             country: country || null,
+            currency: currency || "USD",
+            currencySymbol: currencySymbol || "$",
+            currencyLocale: currencyLocale || "en-US",
+            currencySet: true, // Admin sets currency, so mark as set
             role: "AGENCY_ADMIN",
             agencyId: createdAgency._id,
             isIndependent: false,
@@ -285,6 +268,10 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
       phone: phone || null,
       city: city || null,
       country: country || null,
+      currency: currency || "USD",
+      currencySymbol: currencySymbol || "$",
+      currencyLocale: currencyLocale || "en-US",
+      currencySet: true, // Admin sets currency, so mark as set
       role,
       agencyId: agencyId || null,
       isIndependent: isIndependent === true || (role === "AGENT" && !agencyId),
@@ -321,6 +308,56 @@ exports.createUser = tryCatchAsync(async (req, res, next) => {
     res,
     { user: transformedUser },
     "User created successfully",
+    success
+  );
+});
+
+/**
+ * PATCH /api/v1/admin/users/:userId/currency
+ * Set currency for a user (only for PLATFORM_ADMIN)
+ */
+exports.setUserCurrency = tryCatchAsync(async (req, res, next) => {
+  if (req.user.role !== 'PLATFORM_ADMIN') {
+    return next(new AppError('Only platform admins can set user currency', 403));
+  }
+
+  const userId = req.params.id;
+  const { currency, currencySymbol, currencyLocale } = req.body;
+
+  if (!currency) {
+    return next(new AppError("Currency is required", 400));
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+
+  // Update currency and mark as set
+  user.currency = currency;
+  user.currencySymbol = currencySymbol || "$";
+  user.currencyLocale = currencyLocale || "en-US";
+  user.currencySet = true;
+
+  await user.save();
+
+  user.password = undefined;
+
+  const transformedUser = {
+    _id: user._id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    currency: user.currency,
+    currencySymbol: user.currencySymbol,
+    currencyLocale: user.currencyLocale,
+    currencySet: user.currencySet,
+  };
+
+  apiResponse.successResponse(
+    res,
+    { user: transformedUser },
+    "User currency set successfully",
     success
   );
 });
