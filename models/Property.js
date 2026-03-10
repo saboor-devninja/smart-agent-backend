@@ -121,7 +121,7 @@ const propertySchema = new mongoose.Schema(
     },
     commissionType: {
       type: String,
-      enum: ["PERCENTAGE", "FIXED_AMOUNT"],
+      enum: ["NONE", "PERCENTAGE", "FIXED_AMOUNT"],
     },
     commissionPercentage: {
       type: mongoose.Schema.Types.Decimal128,

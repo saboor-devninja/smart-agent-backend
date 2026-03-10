@@ -28,10 +28,7 @@ class CommissionService {
       return null;
     }
 
-    if (!property.commissionType) {
-      return null;
-    }
-
+    // NONE, null, or missing commissionType = no commission, but still create LandlordPayment for statements
     let agentGrossCommission = 0;
     if (property.commissionType === "PERCENTAGE" && property.commissionPercentage) {
       // Issue 5: Clamp commission percentage to 0-100%
@@ -43,10 +40,7 @@ class CommissionService {
       // Ensure fixed amount is non-negative
       agentGrossCommission = Math.max(0, Number(property.commissionFixedAmount));
     }
-
-    if (agentGrossCommission === 0) {
-      return null;
-    }
+    // NONE, null, or missing: agentGrossCommission stays 0, landlord gets full amount
 
     const isAgencyLease = agencyId && lease.agencyCommissionEnabled;
     let agentPlatformFee = 0;
@@ -138,7 +132,7 @@ class CommissionService {
 
     // Issue 12: Store commission settings for historical accuracy
     const commissionSettings = {
-      propertyCommissionType: property.commissionType,
+      propertyCommissionType: property.commissionType || "NONE",
       propertyCommissionPercentage: property.commissionPercentage || null,
       propertyCommissionFixedAmount: property.commissionFixedAmount || null,
       propertyPlatformFeePercentage: property.platformFeePercentage || null,
@@ -248,36 +242,16 @@ class CommissionService {
       return null;
     }
 
-    if (!property.commissionType) {
-      existingCommission.status = "CANCELLED";
-      await existingCommission.save();
-      await LandlordPayment.updateOne(
-        { paymentRecordId: paymentRecord._id },
-        { status: "CANCELLED" }
-      );
-      return null;
-    }
-
-    // Issue 12: Use stored settings if available, otherwise use current
+    // Issue 12: Use stored settings if available, otherwise use current (NONE/null = no commission)
     const commissionType = useStoredSettings 
-      ? existingCommission.commissionSettings.propertyCommissionType 
+      ? existingCommission.commissionSettings?.propertyCommissionType 
       : property.commissionType;
     const commissionPercentage = useStoredSettings 
-      ? existingCommission.commissionSettings.propertyCommissionPercentage 
+      ? existingCommission.commissionSettings?.propertyCommissionPercentage 
       : property.commissionPercentage;
     const commissionFixedAmount = useStoredSettings 
-      ? existingCommission.commissionSettings.propertyCommissionFixedAmount 
+      ? existingCommission.commissionSettings?.propertyCommissionFixedAmount 
       : property.commissionFixedAmount;
-
-    if (!commissionType) {
-      existingCommission.status = "CANCELLED";
-      await existingCommission.save();
-      await LandlordPayment.updateOne(
-        { paymentRecordId: paymentRecord._id },
-        { status: "CANCELLED" }
-      );
-      return null;
-    }
 
     let agentGrossCommission = 0;
     if (commissionType === "PERCENTAGE" && commissionPercentage) {
@@ -290,16 +264,7 @@ class CommissionService {
       // Ensure fixed amount is non-negative
       agentGrossCommission = Math.max(0, Number(commissionFixedAmount));
     }
-
-    if (agentGrossCommission === 0) {
-      existingCommission.status = "CANCELLED";
-      await existingCommission.save();
-      await LandlordPayment.updateOne(
-        { paymentRecordId: paymentRecord._id },
-        { status: "CANCELLED" }
-      );
-      return null;
-    }
+    // NONE, null, or missing: agentGrossCommission stays 0, landlord gets full amount
 
     const isAgencyLease = existingCommission.agencyCommissionEnabled;
     let agentPlatformFee = 0;

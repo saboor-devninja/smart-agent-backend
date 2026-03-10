@@ -207,51 +207,20 @@ async function createEnvelopeFromDocument(params) {
       includeDocumentFields: false,
       includeCertificateOfCompletion: false,
       enabled: true,
-      events: [
-        {
-          envelopeEventStatusCode: "sent",
-          includeDocuments: false,
-        },
-        {
-          envelopeEventStatusCode: "delivered",
-          includeDocuments: false,
-        },
-        {
-          envelopeEventStatusCode: "completed",
-          includeDocuments: false,
-        },
-        {
-          envelopeEventStatusCode: "declined",
-          includeDocuments: false,
-        },
-        {
-          envelopeEventStatusCode: "voided",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "Sent",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "Delivered",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "Completed",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "Declined",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "AuthenticationFailed",
-          includeDocuments: false,
-        },
-        {
-          recipientEventStatusCode: "AutoResponded",
-          includeDocuments: false,
-        },
+      envelopeEvents: [
+        { envelopeEventStatusCode: "sent", includeDocuments: false },
+        { envelopeEventStatusCode: "delivered", includeDocuments: false },
+        { envelopeEventStatusCode: "completed", includeDocuments: false },
+        { envelopeEventStatusCode: "declined", includeDocuments: false },
+        { envelopeEventStatusCode: "voided", includeDocuments: false },
+      ],
+      recipientEvents: [
+        { recipientEventStatusCode: "Sent", includeDocuments: false },
+        { recipientEventStatusCode: "Delivered", includeDocuments: false },
+        { recipientEventStatusCode: "Completed", includeDocuments: false },
+        { recipientEventStatusCode: "Declined", includeDocuments: false },
+        { recipientEventStatusCode: "AuthenticationFailed", includeDocuments: false },
+        { recipientEventStatusCode: "AutoResponded", includeDocuments: false },
       ],
     },
     status: "sent",

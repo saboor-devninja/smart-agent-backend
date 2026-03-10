@@ -180,7 +180,7 @@ class PropertyDTO {
 
     // Commission fields
     if (data.commissionType) {
-      const validCommissionTypes = ['PERCENTAGE', 'FIXED_AMOUNT'];
+      const validCommissionTypes = ['NONE', 'PERCENTAGE', 'FIXED_AMOUNT'];
       if (!validCommissionTypes.includes(data.commissionType)) {
         errors.push(`Commission type must be one of: ${validCommissionTypes.join(', ')}`);
       } else {
