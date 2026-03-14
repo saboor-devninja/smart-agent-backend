@@ -221,9 +221,9 @@ class TenantService {
         0
       );
 
-      // Calculate total due (sum of amountDue for PENDING/PARTIALLY_PAID records)
+      // Calculate total due (sum of amountDue for PENDING/SENT/PARTIALLY_PAID/OVERDUE records)
       const unpaidPayments = allPayments.filter(
-        (p) => p.status === "PENDING" || p.status === "PARTIALLY_PAID"
+        (p) => p.status === "PENDING" || p.status === "SENT" || p.status === "PARTIALLY_PAID" || p.status === "OVERDUE"
       );
       totalDue = unpaidPayments.reduce(
         (sum, p) => sum + normalizeAmount(p.amountDue),
@@ -233,7 +233,7 @@ class TenantService {
       const now = new Date();
       const upcomingPayments = allPayments.filter(
         (p) =>
-          (p.status === "PENDING" || p.status === "PARTIALLY_PAID") &&
+          (p.status === "PENDING" || p.status === "SENT" || p.status === "PARTIALLY_PAID") &&
           p.dueDate &&
           new Date(p.dueDate) >= now
       );

@@ -717,23 +717,38 @@ class LeasePaymentService {
       leaseId: { $in: leaseIds },
     }).lean();
 
+    const getTotalAmount = (r) => {
+      const amountDue = normalizeAmount(r.amountDue) || 0;
+      const charges = Array.isArray(r.charges) ? r.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + (normalizeAmount(c.amount) || 0), 0);
+      return amountDue + totalCharges;
+    };
+
     const summary = {
-      total: allRecords.reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+      total: allRecords
+        .filter((r) => r.status !== "CANCELLED")
+        .reduce((sum, r) => sum + getTotalAmount(r), 0),
       collected: allRecords
         .filter((r) => r.status === "PAID")
-        .reduce((sum, r) => sum + (normalizeAmount(r.amountPaid) || 0), 0),
+        .reduce((sum, r) => sum + (normalizeAmount(r.amountPaid) || getTotalAmount(r)), 0),
       pending: allRecords
-        .filter((r) => r.status === "PENDING" || r.status === "SENT")
-        .reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+        .filter((r) => {
+          if (r.status !== "PENDING" && r.status !== "SENT") return false;
+          if (!r.dueDate) return true;
+          return new Date(r.dueDate) >= new Date();
+        })
+        .reduce((sum, r) => sum + getTotalAmount(r), 0),
       overdue: allRecords
         .filter((r) => {
-          const isOverdue =
-            (r.status === "PENDING" || r.status === "SENT") &&
-            r.dueDate &&
-            new Date(r.dueDate) < new Date();
-          return isOverdue;
+          if (r.status === "PAID" || r.status === "CANCELLED") return false;
+          if (!r.dueDate) return false;
+          return new Date(r.dueDate) < new Date();
         })
-        .reduce((sum, r) => sum + (normalizeAmount(r.amountDue) || 0), 0),
+        .reduce((sum, r) => {
+          const total = getTotalAmount(r);
+          const paid = r.status === "PARTIALLY_PAID" ? normalizeAmount(r.amountPaid) || 0 : 0;
+          return sum + (total - paid);
+        }, 0),
     };
 
     return {

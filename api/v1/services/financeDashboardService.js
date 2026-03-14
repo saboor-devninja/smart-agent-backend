@@ -22,7 +22,7 @@ class FinanceDashboardService {
       return 0;
     };
 
-    // Rent Collection Metrics
+    // Rent Collection Metrics - Current Month
     const baseQuery = {
       agentId,
       type: "RENT",
@@ -39,17 +39,56 @@ class FinanceDashboardService {
     let total = 0;
 
     paymentsThisMonth.forEach((p) => {
-      const amount = normalizeAmount(p.amountDue);
-      total += amount;
+      // Skip CANCELLED - don't count toward collection metrics
+      if (p.status === "CANCELLED") return;
+
+      const amountDue = normalizeAmount(p.amountDue);
+      const charges = Array.isArray(p.charges) ? p.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
+      const totalAmount = amountDue + totalCharges;
+
+      total += totalAmount;
 
       if (p.status === "PAID") {
-        collected += amount;
-      } else if (p.status === "PENDING" || p.status === "PARTIALLY_PAID") {
+        collected += totalAmount;
+      } else if (p.status === "PARTIALLY_PAID") {
+        const amountPaid = normalizeAmount(p.amountPaid);
+        collected += amountPaid;
+        const remainder = totalAmount - amountPaid;
         if (p.dueDate && new Date(p.dueDate) < now) {
-          overdue += amount;
+          overdue += remainder;
         } else {
-          pending += amount;
+          pending += remainder;
         }
+      } else if (p.status === "PENDING" || p.status === "SENT" || p.status === "OVERDUE") {
+        // SENT = invoice sent; OVERDUE = cron updated from PENDING when past due
+        if (p.dueDate && new Date(p.dueDate) < now) {
+          overdue += totalAmount;
+        } else {
+          pending += totalAmount;
+        }
+      }
+    });
+
+    // Include overdue from PREVIOUS months (not shown in "current month" total but important for collection)
+    const overdueFromPastMonths = await LeasePaymentRecord.find({
+      agentId,
+      type: "RENT",
+      status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID", "OVERDUE"] },
+      dueDate: { $lt: startOfMonth },
+    }).lean();
+
+    overdueFromPastMonths.forEach((p) => {
+      const amountDue = normalizeAmount(p.amountDue);
+      const charges = Array.isArray(p.charges) ? p.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
+      const totalAmount = amountDue + totalCharges;
+
+      if (p.status === "PARTIALLY_PAID") {
+        const amountPaid = normalizeAmount(p.amountPaid);
+        overdue += totalAmount - amountPaid;
+      } else {
+        overdue += totalAmount;
       }
     });
 
@@ -127,7 +166,7 @@ class FinanceDashboardService {
     const upcomingDue = await LeasePaymentRecord.find({
       agentId,
       type: "RENT",
-      status: "PENDING",
+      status: { $in: ["PENDING", "SENT"] },
       dueDate: { $gte: now, $lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) },
     })
       .sort({ dueDate: 1 })
@@ -142,17 +181,43 @@ class FinanceDashboardService {
       })
       .lean();
 
+    // Overdue Rent (past due, unpaid - from any month)
+    const overduePayments = await LeasePaymentRecord.find({
+      agentId,
+      type: "RENT",
+      status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID", "OVERDUE"] },
+      dueDate: { $lt: now },
+    })
+      .sort({ dueDate: 1 })
+      .limit(10)
+      .populate({
+        path: "leaseId",
+        select: "propertyId tenantId",
+        populate: [
+          { path: "propertyId", select: "title address" },
+          { path: "tenantId", select: "firstName lastName" },
+        ],
+      })
+      .lean();
+
     const mapPayment = (p) => {
       const lease = p.leaseId;
       const property = lease?.propertyId || null;
       const tenant = lease?.tenantId || null;
+      const amountDue = normalizeAmount(p.amountDue);
+      const charges = Array.isArray(p.charges) ? p.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
+      const totalAmount = amountDue + totalCharges;
+      const amountPaid = normalizeAmount(p.amountPaid);
+      const amountOutstanding = p.status === "PARTIALLY_PAID" ? totalAmount - amountPaid : totalAmount;
 
       return {
         _id: p._id,
         status: p.status,
         dueDate: p.dueDate,
         paidDate: p.paidDate || null,
-        amountDue: normalizeAmount(p.amountDue),
+        amountDue: totalAmount,
+        amountOutstanding,
         property: property
           ? {
               _id: property._id,
@@ -186,6 +251,7 @@ class FinanceDashboardService {
       },
       recentRentPayments: recentPaid.map(mapPayment),
       upcomingRentDue: upcomingDue.map(mapPayment),
+      overdueRentPayments: overduePayments.map(mapPayment),
     };
   }
 }

@@ -101,33 +101,36 @@ class CommissionService {
       agencyNetCommission = agencyGrossCommission;
       agencyPlatformFee = platformCommission;
     } else {
-      // Individual Agent: Platform fee is calculated on agent commission
-      // Issue 3: Clamp platform fee percentage and ensure it doesn't exceed commission
+      // Individual Agent
       let platformFeePercentage = Number(property.platformFeePercentage || 2);
       if (platformFeePercentage < 0) platformFeePercentage = 0;
       if (platformFeePercentage > 100) platformFeePercentage = 100;
-      
-      agentPlatformFee = (agentGrossCommission * platformFeePercentage) / 100;
-      // Ensure platform fee doesn't exceed commission
-      if (agentPlatformFee > agentGrossCommission) {
-        agentPlatformFee = agentGrossCommission;
+
+      if (agentGrossCommission > 0) {
+        // Platform fee on agent commission (deducted from agent, not landlord)
+        agentPlatformFee = (agentGrossCommission * platformFeePercentage) / 100;
+        if (agentPlatformFee > agentGrossCommission) agentPlatformFee = agentGrossCommission;
+        agentNetCommission = agentGrossCommission - agentPlatformFee;
+        if (agentNetCommission < 0) agentNetCommission = 0;
+        platformCommission = agentPlatformFee;
+      } else {
+        // No agent commission: Platform takes 2% of rent (landlord pays platform fee)
+        platformCommission = (totalPaymentAmount * platformFeePercentage) / 100;
       }
-      
-      agentNetCommission = agentGrossCommission - agentPlatformFee;
-      // Ensure agent commission is non-negative
-      if (agentNetCommission < 0) agentNetCommission = 0;
-      platformCommission = agentPlatformFee;
     }
 
-    // Issue 14: Validate landlord net amount is valid (0 <= landlordNetAmount <= totalPaymentAmount)
-    const landlordNetAmount = totalPaymentAmount - agentGrossCommission;
+    // Landlord net: rent minus agent commission; when no agent commission, also minus platform fee
+    let landlordNetAmount = totalPaymentAmount - agentGrossCommission;
+    if (agentGrossCommission === 0 && platformCommission > 0) {
+      landlordNetAmount = totalPaymentAmount - platformCommission;
+    }
     // Since agentGrossCommission is clamped to <= totalPaymentAmount, landlordNetAmount will always be >= 0
 
-    // Issue 19: Reconciliation check
-    const calculatedTotal = agentGrossCommission + landlordNetAmount;
+    // Issue 19: Reconciliation check (totalPaymentAmount = agent + landlord + platform when no agent commission)
+    const calculatedTotal = agentGrossCommission + landlordNetAmount + (agentGrossCommission === 0 ? platformCommission : 0);
     const difference = Math.abs(calculatedTotal - totalPaymentAmount);
     if (difference > 0.01) {
-      console.warn(`Commission reconciliation warning: Payment ${totalPaymentAmount}, Commission ${agentGrossCommission}, Landlord ${landlordNetAmount}, Difference: ${difference}`);
+      console.warn(`Commission reconciliation warning: Payment ${totalPaymentAmount}, Commission ${agentGrossCommission}, Landlord ${landlordNetAmount}, Platform ${platformCommission}, Difference: ${difference}`);
     }
 
     // Issue 12: Store commission settings for historical accuracy
@@ -320,38 +323,38 @@ class CommissionService {
       agencyNetCommission = agencyGrossCommission;
       agencyPlatformFee = platformCommission;
     } else {
-      // Individual Agent: Platform fee is calculated on agent commission
-      // Issue 12: Use stored settings if available
+      // Individual Agent
       const platformFeePercentage = useStoredSettings && existingCommission.commissionSettings?.propertyPlatformFeePercentage
         ? Number(existingCommission.commissionSettings.propertyPlatformFeePercentage)
         : Number(property.platformFeePercentage || 2);
 
-      // Issue 3: Clamp platform fee percentage and ensure it doesn't exceed commission
       let platformFeePct = platformFeePercentage;
       if (platformFeePct < 0) platformFeePct = 0;
       if (platformFeePct > 100) platformFeePct = 100;
-      
-      agentPlatformFee = (agentGrossCommission * platformFeePct) / 100;
-      // Ensure platform fee doesn't exceed commission
-      if (agentPlatformFee > agentGrossCommission) {
-        agentPlatformFee = agentGrossCommission;
+
+      if (agentGrossCommission > 0) {
+        agentPlatformFee = (agentGrossCommission * platformFeePct) / 100;
+        if (agentPlatformFee > agentGrossCommission) agentPlatformFee = agentGrossCommission;
+        agentNetCommission = agentGrossCommission - agentPlatformFee;
+        if (agentNetCommission < 0) agentNetCommission = 0;
+        platformCommission = agentPlatformFee;
+      } else {
+        // No agent commission: Platform takes 2% of rent (landlord pays platform fee)
+        platformCommission = (totalPaymentAmount * platformFeePct) / 100;
       }
-      
-      agentNetCommission = agentGrossCommission - agentPlatformFee;
-      // Ensure agent commission is non-negative
-      if (agentNetCommission < 0) agentNetCommission = 0;
-      platformCommission = agentPlatformFee;
     }
 
-    // Issue 14: Validate landlord net amount is valid (0 <= landlordNetAmount <= totalPaymentAmount)
-    const landlordNetAmount = totalPaymentAmount - agentGrossCommission;
-    // Since agentGrossCommission is clamped to <= totalPaymentAmount, landlordNetAmount will always be >= 0
+    // Landlord net: rent minus agent commission; when no agent commission, also minus platform fee
+    let landlordNetAmount = totalPaymentAmount - agentGrossCommission;
+    if (agentGrossCommission === 0 && platformCommission > 0) {
+      landlordNetAmount = totalPaymentAmount - platformCommission;
+    }
 
     // Issue 19: Reconciliation check
-    const calculatedTotal = agentGrossCommission + landlordNetAmount;
+    const calculatedTotal = agentGrossCommission + landlordNetAmount + (agentGrossCommission === 0 ? platformCommission : 0);
     const difference = Math.abs(calculatedTotal - totalPaymentAmount);
     if (difference > 0.01) {
-      console.warn(`Commission reconciliation warning: Payment ${totalPaymentAmount}, Commission ${agentGrossCommission}, Landlord ${landlordNetAmount}, Difference: ${difference}`);
+      console.warn(`Commission reconciliation warning: Payment ${totalPaymentAmount}, Commission ${agentGrossCommission}, Landlord ${landlordNetAmount}, Platform ${platformCommission}, Difference: ${difference}`);
     }
 
     existingCommission.paymentAmount = totalPaymentAmount;

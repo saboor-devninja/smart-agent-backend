@@ -44,7 +44,7 @@ const leasePaymentRecordSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PENDING", "SENT", "PARTIALLY_PAID", "PAID", "CANCELLED"],
+      enum: ["PENDING", "SENT", "PARTIALLY_PAID", "PAID", "CANCELLED", "OVERDUE"],
       default: "PENDING",
     },
     amountPaid: {

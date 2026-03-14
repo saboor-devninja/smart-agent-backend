@@ -824,7 +824,7 @@ class LeaseService {
     
     // Issue 10: Cancel all pending payments when lease is terminated
     await LeasePaymentRecord.updateMany(
-      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID"] } },
+      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID", "OVERDUE"] } },
       { status: "CANCELLED" }
     );
     
@@ -864,7 +864,7 @@ class LeaseService {
     
     // Issue 10: Cancel all pending payments when lease is cancelled
     await LeasePaymentRecord.updateMany(
-      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID"] } },
+      { leaseId: lease._id, status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID", "OVERDUE"] } },
       { status: "CANCELLED" }
     );
     await this.updatePropertyAvailability(lease.propertyId);
