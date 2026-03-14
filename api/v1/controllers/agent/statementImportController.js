@@ -438,7 +438,7 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
             { paymentRecordId: paymentRecord._id },
             {
               status: "PAID",
-              paidAt: paymentRecord.paidDate || new Date(),
+              paidAt: paymentRecord.paidDate || paymentRecord.dueDate || new Date(),
             }
           );
         } catch (error) {
@@ -487,7 +487,7 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
           { paymentRecordId: paymentRecord._id },
           {
             status: "PAID",
-            paidAt: paymentRecord.paidDate || new Date(),
+            paidAt: paymentRecord.paidDate || paymentRecord.dueDate || new Date(),
           }
         );
       } catch (error) {

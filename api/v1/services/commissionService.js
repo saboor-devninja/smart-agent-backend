@@ -151,6 +151,9 @@ class CommissionService {
       commissionSettings.leaseAgencyCommissionFixed = lease.agencyCommissionFixed || null;
     }
 
+    const paidDate = paymentRecord.paidDate || paymentRecord.dueDate || new Date();
+    const paidDateNormalized = paidDate instanceof Date ? paidDate : new Date(paidDate);
+
     const commissionRecord = await CommissionRecord.create({
       paymentRecordId: paymentRecord._id,
       leaseId: lease._id,
@@ -170,6 +173,8 @@ class CommissionService {
       landlordNetAmount,
       commissionSettings,
       status: "PENDING",
+      createdAt: paidDateNormalized,
+      updatedAt: paidDateNormalized,
     });
 
     const landlordPayment = await LandlordPayment.create({
@@ -515,7 +520,7 @@ class CommissionService {
     const commissions = await CommissionRecord.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
       .populate("propertyId", "title address currency currencySymbol currencyLocale")
-      .populate("paymentRecordId", "label type dueDate")
+      .populate("paymentRecordId", "label type dueDate isFirstMonthRent isSecurityDeposit")
       .populate("agentId", "firstName lastName email")
       .sort({ createdAt: -1 })
       .lean();
@@ -553,17 +558,21 @@ class CommissionService {
       query.leaseId = filters.leaseId;
     }
     if (filters.startDate || filters.endDate) {
-      query.createdAt = {};
-      if (filters.startDate) query.createdAt.$gte = new Date(filters.startDate);
-      if (filters.endDate) query.createdAt.$lte = new Date(filters.endDate);
+      const dateRange = {};
+      if (filters.startDate) dateRange.$gte = new Date(filters.startDate);
+      if (filters.endDate) dateRange.$lte = new Date(filters.endDate);
+      query.$or = [
+        { paidAt: dateRange },
+        { paidAt: null, createdAt: dateRange },
+      ];
     }
 
     const commissions = await CommissionRecord.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
       .populate("propertyId", "title address currency currencySymbol currencyLocale")
-      .populate("paymentRecordId", "label type dueDate")
+      .populate("paymentRecordId", "label type dueDate isFirstMonthRent isSecurityDeposit")
       .populate("agentId", "firstName lastName email")
-      .sort({ createdAt: -1 })
+      .sort({ paidAt: -1, createdAt: -1 })
       .lean();
 
     return commissions.map((c) => ({
@@ -604,7 +613,7 @@ class CommissionService {
     const payments = await LandlordPayment.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
       .populate("propertyId", "title address currency currencySymbol currencyLocale")
-      .populate("paymentRecordId", "label type dueDate")
+      .populate("paymentRecordId", "label type dueDate isFirstMonthRent isSecurityDeposit")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -697,6 +706,65 @@ class CommissionService {
     await commission.save();
 
     return commission.toObject();
+  }
+
+  /**
+   * Backfill missing commission records for paid rent payments.
+   * Use when commission records were never created (e.g. data migrated before commission logic).
+   * @returns {{ created: number, skipped: number, errors: Array<{ paymentId: string, error: string }> }}
+   */
+  static async backfillMissingCommissions() {
+    const paidRentPayments = await LeasePaymentRecord.find({
+      type: "RENT",
+      status: "PAID",
+    })
+      .lean();
+
+    const result = { created: 0, skipped: 0, errors: [] };
+
+    for (const payment of paidRentPayments) {
+      const existing = await CommissionRecord.findOne({
+        paymentRecordId: payment._id,
+      }).lean();
+
+      if (existing) {
+        result.skipped += 1;
+        continue;
+      }
+
+      try {
+        const lease = await Lease.findById(payment.leaseId).lean();
+        if (!lease) {
+          result.errors.push({ paymentId: payment._id, error: "Lease not found" });
+          continue;
+        }
+
+        const agentId = payment.agentId || lease.agentId;
+        const agencyId = lease.agencyId || null;
+
+        await this.calculateAndRecord(payment, agentId, agencyId);
+
+        const paidDate = payment.paidDate || payment.dueDate || new Date();
+        const paidDateNorm = paidDate instanceof Date ? paidDate : new Date(paidDate);
+        await CommissionRecord.updateOne(
+          { paymentRecordId: payment._id },
+          {
+            status: "PAID",
+            paidAt: paidDateNorm,
+            updatedAt: paidDateNorm,
+          }
+        );
+
+        result.created += 1;
+      } catch (err) {
+        result.errors.push({
+          paymentId: payment._id,
+          error: err.message || String(err),
+        });
+      }
+    }
+
+    return result;
   }
 }
 

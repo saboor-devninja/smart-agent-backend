@@ -1,5 +1,6 @@
 const express = require("express");
 const { getAllUsers, getAgencies, createUser, setUserCurrency } = require("../../controllers/admin/adminUserController");
+const { getAllCommissions, backfillCommissions } = require("../../controllers/admin/adminCommissionController");
 const { isLoggedIn } = require("../../middleware/auth");
 const { validateParamId } = require("../../../../utils/validateObjectId");
 
@@ -7,6 +8,11 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(isLoggedIn);
+
+// GET /api/v1/admin/commissions - Get all commissions (PLATFORM_ADMIN only)
+router.get("/commissions", getAllCommissions);
+// POST /api/v1/admin/commissions/backfill - Create missing commissions for paid rent (PLATFORM_ADMIN only)
+router.post("/commissions/backfill", backfillCommissions);
 
 // GET /api/v1/admin/users - Get all users (PLATFORM_ADMIN only)
 router.get("/users", getAllUsers);

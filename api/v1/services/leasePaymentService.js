@@ -205,6 +205,30 @@ class LeasePaymentService {
 
     await this._syncPrerequisitesForRecord(record);
 
+    // Create commission when payment is created with status PAID (e.g. adding historical paid rent)
+    if (record.type === "RENT" && record.status === "PAID") {
+      try {
+        const effectiveAgentId = agentId || record.agentId || lease.agentId;
+        const effectiveAgencyId = agencyId ?? lease.agencyId ?? null;
+        if (effectiveAgentId) {
+          const existingCommission = await CommissionRecord.findOne({
+            paymentRecordId: record._id,
+          }).lean();
+          if (!existingCommission) {
+            await CommissionService.calculateAndRecord(record.toObject(), effectiveAgentId, effectiveAgencyId);
+            const paidDate = record.paidDate || record.dueDate || new Date();
+            const paidDateNorm = paidDate instanceof Date ? paidDate : new Date(paidDate);
+            await CommissionRecord.updateOne(
+              { paymentRecordId: record._id },
+              { status: "PAID", paidAt: paidDateNorm, updatedAt: paidDateNorm }
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error creating commission for new paid payment:", error);
+      }
+    }
+
     // Create notification for rent due
     try {
       const { notifyRentDue } = require("../../../utils/notificationHelper");
@@ -308,22 +332,30 @@ class LeasePaymentService {
       }).lean();
 
       if (record.status === "PAID") {
-        // Payment is PAID - ensure commission exists and is up-to-date
-        if (!existingCommission) {
+        // Use record/lease agentId and agencyId when null (PLATFORM_ADMIN case)
+        const effectiveAgentId = agentId || record.agentId || lease.agentId;
+        const effectiveAgencyId = agencyId ?? lease.agencyId ?? null;
+
+        if (!effectiveAgentId) {
+          console.error("Cannot create commission: no agentId on payment or lease", { paymentId: record._id, leaseId: record.leaseId });
+        } else if (!existingCommission) {
           // Create new commission if payment just became PAID
-          await CommissionService.calculateAndRecord(record, agentId, agencyId);
+          await CommissionService.calculateAndRecord(record, effectiveAgentId, effectiveAgencyId);
         } else {
           // Update existing commission (handles amount changes and reactivation)
-          await CommissionService.recalculateAndUpdate(record, agentId, agencyId);
+          await CommissionService.recalculateAndUpdate(record, effectiveAgentId, effectiveAgencyId);
         }
 
         // Mark commission as PAID when tenant payment is fully paid
         // Agent commission is considered "earned/paid" when tenant pays rent
+        const paidDate = record.paidDate || record.dueDate || new Date();
+        const paidDateNorm = paidDate instanceof Date ? paidDate : new Date(paidDate);
         await CommissionRecord.updateOne(
           { paymentRecordId: record._id },
           {
             status: "PAID",
-            paidAt: record.paidDate || new Date(),
+            paidAt: paidDateNorm,
+            updatedAt: paidDateNorm,
           }
         );
       } else if (wasPaid && existingCommission) {
