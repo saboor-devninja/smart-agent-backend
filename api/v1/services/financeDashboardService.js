@@ -70,27 +70,8 @@ class FinanceDashboardService {
       }
     });
 
-    // Include overdue from PREVIOUS months (not shown in "current month" total but important for collection)
-    const overdueFromPastMonths = await LeasePaymentRecord.find({
-      agentId,
-      type: "RENT",
-      status: { $in: ["PENDING", "SENT", "PARTIALLY_PAID", "OVERDUE"] },
-      dueDate: { $lt: startOfMonth },
-    }).lean();
-
-    overdueFromPastMonths.forEach((p) => {
-      const amountDue = normalizeAmount(p.amountDue);
-      const charges = Array.isArray(p.charges) ? p.charges : [];
-      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
-      const totalAmount = amountDue + totalCharges;
-
-      if (p.status === "PARTIALLY_PAID") {
-        const amountPaid = normalizeAmount(p.amountPaid);
-        overdue += totalAmount - amountPaid;
-      } else {
-        overdue += totalAmount;
-      }
-    });
+    // Rent Collection overdue = current month only (payments due this month that are past due)
+    // Overdue from past months is shown in the Overdue Rent list below, not in this card
 
     // Commission Metrics (Current Month)
     const commissionsThisMonth = await CommissionRecord.find({
@@ -112,20 +93,19 @@ class FinanceDashboardService {
     let platformFeePreviousMonth = 0;
     let netEarnings = 0;
 
-    // Current month calculations
+    // Current month calculations - use platformCommission (covers agent fee + 2% on rent when no agent commission)
     commissionsThisMonth.forEach((c) => {
       const gross = normalizeAmount(c.agentGrossCommission);
-      const platformFee = normalizeAmount(c.agentPlatformFee);
+      const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
       const net = normalizeAmount(c.agentNetCommission);
 
-      // Commission earned: Total gross commission
+      // Commission earned: Total gross commission (current month)
       commissionEarned += gross;
-      
-      // Net earnings: Agent earnings after platform fee (commission - platform fee)
+
+      // Net earnings: Agent earnings after platform fee (current month)
       netEarnings += net;
 
       // Platform fee due: All platform fees from current month commissions
-      // Commissions are only created when tenant payment is PAID, so this shows platform fee for this month
       platformFeeDue += platformFee;
 
       // Platform fee paid: Only count platform fees that have been marked as paid
@@ -136,7 +116,7 @@ class FinanceDashboardService {
 
     // Previous month platform fee calculation
     commissionsPreviousMonth.forEach((c) => {
-      const platformFee = normalizeAmount(c.agentPlatformFee);
+      const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
       platformFeePreviousMonth += platformFee;
     });
 
