@@ -655,7 +655,7 @@ class LeasePaymentService {
         .select("_id firstName lastName email")
         .lean(),
       Landlord.find({ _id: { $in: landlordIds } })
-        .select("_id contactPersonName email")
+        .select("_id firstName lastName organizationName isOrganization contactPersonName email")
         .lean(),
     ]);
 
@@ -765,7 +765,9 @@ class LeasePaymentService {
         })),
         landlords: landlords.map((l) => ({
           id: l._id,
-          name: l.contactPersonName || l.email || "Landlord",
+          name: l.isOrganization && l.organizationName
+            ? l.organizationName
+            : l.contactPersonName || `${l.firstName || ""} ${l.lastName || ""}`.trim() || l.email || "Landlord",
         })),
       },
     };

@@ -254,7 +254,9 @@ exports.uploadProperties = tryCatchAsync(async (req, res, next) => {
         status: "CREATED",
         propertyId: property._id,
         propertyTitle: property.title,
-        landlordName: landlord.contactPersonName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim(),
+        landlordName: landlord.isOrganization && landlord.organizationName
+          ? landlord.organizationName
+          : landlord.contactPersonName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim(),
         data: row,
       });
     } catch (error) {
