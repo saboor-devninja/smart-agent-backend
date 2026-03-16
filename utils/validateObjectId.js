@@ -37,7 +37,20 @@ const validateParamId = (req, res, next) => {
   }
 };
 
+/**
+ * Middleware to validate req.params.leasePaymentRecordId
+ */
+const validateParamLeasePaymentRecordId = (req, res, next) => {
+  try {
+    validateObjectId(req.params.leasePaymentRecordId, "Lease Payment Record ID");
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   validateObjectId,
   validateParamId,
+  validateParamLeasePaymentRecordId,
 };

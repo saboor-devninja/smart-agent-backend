@@ -104,6 +104,11 @@ const commissionRecordSchema = new mongoose.Schema(
       default: null,
     },
     // Platform fee payment tracking
+    // Agent marks → platformFeeAgentMarkedAt set; Admin verifies → platformFeePaid = true
+    platformFeeAgentMarkedAt: {
+      type: Date,
+      default: null,
+    },
     platformFeePaid: {
       type: Boolean,
       default: false,

@@ -6,6 +6,7 @@ const { badRequest, success, created } = require("../../../../utils/statusCode")
 const AgentStatementImport = require("../../../../models/AgentStatementImport");
 const AgentStatementRow = require("../../../../models/AgentStatementRow");
 const Tenant = require("../../../../models/Tenant");
+const LeasePaymentService = require("../../services/leasePaymentService");
 
 // Multer instance for CSV/XLSX upload (in-memory)
 const upload = multer({
@@ -457,44 +458,27 @@ exports.applyImport = tryCatchAsync(async (req, res, next) => {
         continue;
       }
     } else if (action === "CREATE") {
-      // Create new payment record
+      // Create new payment record via service (handles platform fee, commission, landlord payment)
       const rentAmount = parseFloat(lease.rentAmount.toString());
-      paymentRecord = await LeasePaymentRecord.create({
+      const dueDate = new Date(row.periodYear, row.periodMonth - 1, lease.dueDay || 1);
+      const record = await LeasePaymentService.create(
         leaseId,
+        {
+          type: "RENT",
+          label: `Rent - ${new Date(row.periodYear, row.periodMonth - 1).toLocaleString("default", { month: "long", year: "numeric" })}`,
+          dueDate,
+          amountDue: rentAmount,
+          status: "PAID",
+          amountPaid: row.amount,
+          paidDate: row.transactionDate,
+          paymentMethod: "BANK_TRANSFER",
+          paymentReference: row.bankReference || `IMPORT-${row._id}`,
+        },
         agentId,
-        agencyId,
-        type: "RENT",
-        label: `Rent - ${new Date(row.periodYear, row.periodMonth - 1).toLocaleString("default", { month: "long", year: "numeric" })}`,
-        dueDate: new Date(row.periodYear, row.periodMonth - 1, lease.dueDay || 1),
-        amountDue: rentAmount,
-        status: "PAID",
-        amountPaid: row.amount,
-        paidDate: row.transactionDate,
-        paymentMethod: "BANK_TRANSFER",
-        paymentReference: row.bankReference || `IMPORT-${row._id}`,
-      });
-      
-      // Create commission records since payment is already PAID
-      try {
-        const CommissionService = require("../../services/commissionService");
-        const CommissionRecord = require("../../../../models/CommissionRecord");
-        
-        // Create commission and landlord payment records
-        await CommissionService.calculateAndRecord(paymentRecord.toObject(), agentId, agencyId);
-        
-        // Mark commission as PAID since payment is already paid
-        await CommissionRecord.updateOne(
-          { paymentRecordId: paymentRecord._id },
-          {
-            status: "PAID",
-            paidAt: paymentRecord.paidDate || paymentRecord.dueDate || new Date(),
-          }
-        );
-      } catch (error) {
-        console.error("Error creating commission for new payment record:", error);
-        // Don't fail the import if commission calculation fails
-      }
-      
+        agencyId
+      );
+      paymentRecord = record;
+
       results.created++;
     } else {
       results.errors.push({ rowId, error: `Invalid action: ${action}` });

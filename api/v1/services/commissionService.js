@@ -7,6 +7,71 @@ const Agency = require("../../../models/Agency");
 const AppError = require("../../../utils/appError");
 
 class CommissionService {
+  /**
+   * Calculate platform fee only for a payment record (for LeasePaymentRecord.platformFeeAmount).
+   * Uses same logic as calculateAndRecord. Applies to all statuses including CANCELLED, PARTIALLY_PAID.
+   * Fee is based on amount at creation (amountDue + charges), not amountPaid.
+   */
+  static async calculatePlatformFeeOnly(paymentRecord) {
+    const lease = await Lease.findById(paymentRecord.leaseId).lean();
+    if (!lease) return 0;
+
+    const property = await Property.findById(lease.propertyId).lean();
+    if (!property) return 0;
+
+    const paymentAmount = Number(paymentRecord.amountDue || 0);
+    const charges = Array.isArray(paymentRecord.charges) ? paymentRecord.charges : [];
+    const totalCharges = charges.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const totalPaymentAmount = paymentAmount + totalCharges;
+
+    if (totalPaymentAmount <= 0) return 0;
+
+    let agentGrossCommission = 0;
+    if (property.commissionType === "PERCENTAGE" && property.commissionPercentage) {
+      let commissionPct = Number(property.commissionPercentage);
+      if (commissionPct < 0) commissionPct = 0;
+      if (commissionPct > 100) commissionPct = 100;
+      agentGrossCommission = (totalPaymentAmount * commissionPct) / 100;
+    } else if (property.commissionType === "FIXED_AMOUNT" && property.commissionFixedAmount) {
+      agentGrossCommission = Math.max(0, Number(property.commissionFixedAmount));
+    }
+
+    const agencyId = lease.agencyId || null;
+    const isAgencyLease = agencyId && lease.agencyCommissionEnabled;
+    let platformCommission = 0;
+
+    if (isAgencyLease) {
+      const agency = await Agency.findById(agencyId).lean();
+      if (!agency) return 0;
+
+      if (agency.agencyPlatformCommissionType === "PERCENTAGE" && agency.agencyPlatformCommissionRate) {
+        let platformPct = Number(agency.agencyPlatformCommissionRate);
+        if (platformPct < 0) platformPct = 0;
+        if (platformPct > 100) platformPct = 100;
+        platformCommission = (agentGrossCommission * platformPct) / 100;
+      } else if (agency.agencyPlatformCommissionType === "FIXED_AMOUNT" && agency.agencyPlatformCommissionFixed) {
+        platformCommission = Math.max(0, Number(agency.agencyPlatformCommissionFixed));
+      }
+      if (platformCommission > agentGrossCommission) {
+        platformCommission = agentGrossCommission;
+      }
+    } else {
+      let platformFeePercentage = Number(property.platformFeePercentage || 2);
+      if (platformFeePercentage < 0) platformFeePercentage = 0;
+      if (platformFeePercentage > 100) platformFeePercentage = 100;
+
+      if (agentGrossCommission > 0) {
+        platformCommission = (agentGrossCommission * platformFeePercentage) / 100;
+        if (platformCommission > agentGrossCommission) platformCommission = agentGrossCommission;
+      } else {
+        const landlordPlatformPct = platformFeePercentage <= 10 ? platformFeePercentage : 2;
+        platformCommission = (totalPaymentAmount * landlordPlatformPct) / 100;
+      }
+    }
+
+    return platformCommission;
+  }
+
   static async calculateAndRecord(paymentRecord, agentId, agencyId) {
     const lease = await Lease.findById(paymentRecord.leaseId).lean();
     if (!lease) {
@@ -157,6 +222,16 @@ class CommissionService {
     const paidDate = paymentRecord.paidDate || paymentRecord.dueDate || new Date();
     const paidDateNormalized = paidDate instanceof Date ? paidDate : new Date(paidDate);
 
+    // Sync platform fee status from LeasePaymentRecord if agent already marked (PENDING → PAID flow)
+    const platformFeeFromPayment = {
+      platformFeeAgentMarkedAt: paymentRecord.platformFeeAgentMarkedAt || null,
+      platformFeePaid: paymentRecord.platformFeePaid || false,
+      platformFeePaidDate: paymentRecord.platformFeePaidDate || null,
+      platformFeePaymentMethod: paymentRecord.platformFeePaymentMethod || null,
+      platformFeePaymentReference: paymentRecord.platformFeePaymentReference || null,
+      platformFeePaymentNotes: paymentRecord.platformFeePaymentNotes || null,
+    };
+
     const commissionRecord = await CommissionRecord.create({
       paymentRecordId: paymentRecord._id,
       leaseId: lease._id,
@@ -178,6 +253,7 @@ class CommissionService {
       status: "PENDING",
       createdAt: paidDateNormalized,
       updatedAt: paidDateNormalized,
+      ...platformFeeFromPayment,
     });
 
     const landlordPayment = await LandlordPayment.create({
@@ -549,6 +625,150 @@ class CommissionService {
   }
 
   /**
+   * Get all records with platform fee for admin - CommissionRecords + LeasePaymentRecords without CommissionRecord.
+   * Admin can mark platform fee on all (paid or not).
+   */
+  static async getAllPlatformFeeRecords(filters = {}) {
+    const normalizeAmount = (v) => {
+      if (v === null || v === undefined) return 0;
+      if (typeof v === "number") return v;
+      if (typeof v === "string") return parseFloat(v) || 0;
+      if (typeof v === "object" && v?.toString) return parseFloat(v.toString()) || 0;
+      return 0;
+    };
+
+    // 1. Get all CommissionRecords (with platform fee)
+    const commissionQuery = {};
+    if (filters.status) commissionQuery.status = filters.status;
+    if (filters.leaseId) commissionQuery.leaseId = filters.leaseId;
+    if (filters.startDate || filters.endDate) {
+      const dateRange = {};
+      if (filters.startDate) dateRange.$gte = new Date(filters.startDate);
+      if (filters.endDate) dateRange.$lte = new Date(filters.endDate + "T23:59:59");
+      commissionQuery.$or = [
+        { paidAt: dateRange },
+        { paidAt: null, createdAt: dateRange },
+      ];
+    }
+
+    const commissions = await CommissionRecord.find(commissionQuery)
+      .populate("leaseId", "leaseNumber startDate endDate")
+      .populate("propertyId", "title address currency currencySymbol currencyLocale")
+      .populate("paymentRecordId", "label type dueDate status isFirstMonthRent isSecurityDeposit")
+      .populate("agentId", "firstName lastName email")
+      .sort({ paidAt: -1, createdAt: -1 })
+      .lean();
+
+    const paymentRecordIdsWithCommission = new Set(
+      commissions.map((c) => c.paymentRecordId?._id || c.paymentRecordId).filter(Boolean)
+    );
+
+    // 2. Get LeasePaymentRecords with platform fee that have NO CommissionRecord
+    const paymentQuery = {
+      type: "RENT",
+      platformFeeAmount: { $exists: true, $gt: 0 },
+      _id: { $nin: Array.from(paymentRecordIdsWithCommission) },
+    };
+    if (filters.leaseId) paymentQuery.leaseId = filters.leaseId;
+    if (filters.startDate || filters.endDate) {
+      paymentQuery.dueDate = {};
+      if (filters.startDate) paymentQuery.dueDate.$gte = new Date(filters.startDate);
+      if (filters.endDate) paymentQuery.dueDate.$lte = new Date(filters.endDate + "T23:59:59");
+    }
+    if (filters.status && filters.status !== "all") {
+      paymentQuery.status = filters.status;
+    }
+
+    const paymentRecords = await LeasePaymentRecord.find(paymentQuery)
+      .populate({
+        path: "leaseId",
+        select: "leaseNumber startDate endDate propertyId tenantId",
+        populate: [
+          { path: "propertyId", select: "title address currency currencySymbol currencyLocale" },
+          { path: "tenantId", select: "firstName lastName email" },
+        ],
+      })
+      .populate("agentId", "firstName lastName email")
+      .sort({ dueDate: -1, createdAt: -1 })
+      .lean();
+
+    // Map CommissionRecords to unified format
+    const commissionRows = commissions
+      .filter((c) => Number(c.platformCommission || c.agentPlatformFee || 0) > 0)
+      .map((c) => ({
+        source: "commission",
+        _id: c._id,
+        paymentRecordId: c.paymentRecordId?._id || c.paymentRecordId,
+        docNumber: c.docNumber,
+        agentId: c.agentId,
+        leaseId: c.leaseId,
+        propertyId: c.propertyId,
+        paymentRecordId_populated: c.paymentRecordId,
+        paymentAmount: normalizeAmount(c.paymentAmount),
+        agentGrossCommission: normalizeAmount(c.agentGrossCommission),
+        platformCommission: normalizeAmount(c.platformCommission || c.agentPlatformFee),
+        status: c.status,
+        createdAt: c.createdAt,
+        paidAt: c.paidAt,
+        platformFeePaid: c.platformFeePaid || false,
+        platformFeePaidDate: c.platformFeePaidDate,
+        platformFeeAgentMarkedAt: c.platformFeeAgentMarkedAt,
+        platformFeePaymentMethod: c.platformFeePaymentMethod,
+        platformFeePaymentReference: c.platformFeePaymentReference,
+        platformFeePaymentNotes: c.platformFeePaymentNotes,
+      }));
+
+    // Map payment records (no CommissionRecord) to unified format
+    const paymentRows = paymentRecords.map((p) => {
+      const fee = normalizeAmount(p.platformFeeAmount);
+      if (fee <= 0) return null;
+      const amountDue = normalizeAmount(p.amountDue);
+      const charges = Array.isArray(p.charges) ? p.charges : [];
+      const totalCharges = charges.reduce((sum, c) => sum + normalizeAmount(c.amount), 0);
+      const totalAmount = amountDue + totalCharges;
+      return {
+        source: "payment_record",
+        _id: p._id,
+        paymentRecordId: p._id,
+        docNumber: p.invoiceNumber,
+        agentId: p.agentId,
+        leaseId: p.leaseId,
+        propertyId: p.leaseId?.propertyId,
+        paymentRecordId_populated: {
+          _id: p._id,
+          label: p.label,
+          type: p.type,
+          dueDate: p.dueDate,
+          isFirstMonthRent: p.isFirstMonthRent,
+          isSecurityDeposit: p.isSecurityDeposit,
+          status: p.status,
+        },
+        paymentAmount: totalAmount,
+        agentGrossCommission: 0,
+        platformCommission: fee,
+        status: p.status,
+        createdAt: p.createdAt,
+        paidAt: p.paidDate,
+        platformFeePaid: p.platformFeePaid || false,
+        platformFeePaidDate: p.platformFeePaidDate,
+        platformFeeAgentMarkedAt: p.platformFeeAgentMarkedAt,
+        platformFeePaymentMethod: p.platformFeePaymentMethod,
+        platformFeePaymentReference: p.platformFeePaymentReference,
+        platformFeePaymentNotes: p.platformFeePaymentNotes,
+      };
+    }).filter(Boolean);
+
+    // Combine and sort by date (newest first)
+    const combined = [...commissionRows, ...paymentRows].sort((a, b) => {
+      const dateA = new Date(a.paidAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.paidAt || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    return combined;
+  }
+
+  /**
    * Get all commissions for platform admin (no agent/agency restriction)
    */
   static async getAllCommissions(filters = {}) {
@@ -676,39 +896,133 @@ class CommissionService {
     return landlordPayment.toObject();
   }
 
-  static async markPlatformFeeAsPaid(commissionRecordId, data, agentId, isPlatformAdmin = false) {
-    const CommissionRecord = require("../../../models/CommissionRecord");
-    
+  static async markPlatformFeeAsPaid(commissionRecordId, data, agentId, isPlatformAdmin = false, agencyId = null) {
     const commission = await CommissionRecord.findById(commissionRecordId);
     if (!commission) {
       throw new AppError("Commission record not found", 404);
     }
 
-    // Verify ownership - agent can only mark their own platform fees as paid
-    // Platform admin can mark any platform fee as paid
-    if (!isPlatformAdmin && commission.agentId.toString() !== agentId.toString()) {
-      throw new AppError("You can only mark your own platform fees as paid", 403);
+    // Platform admin can mark any; agent can mark own; agency admin can mark agency's
+    if (!isPlatformAdmin) {
+      const isOwn = commission.agentId.toString() === agentId.toString();
+      const isAgencyAdmin =
+        agencyId &&
+        commission.agencyId &&
+        commission.agencyId.toString() === agencyId.toString();
+      if (!isOwn && !isAgencyAdmin) {
+        throw new AppError("You can only mark your own or your agency's platform fees as paid", 403);
+      }
     }
 
     // Check if platform fee exists - check both agentPlatformFee and platformCommission
     const agentPlatformFee = Number(commission.agentPlatformFee || 0);
     const platformCommission = Number(commission.platformCommission || 0);
     const platformFee = agentPlatformFee > 0 ? agentPlatformFee : platformCommission;
-    
+
     if (platformFee === 0) {
       throw new AppError("No platform fee to mark as paid", 400);
     }
 
-    // Update platform fee payment fields
-    commission.platformFeePaid = true;
-    commission.platformFeePaidDate = data.paidDate || new Date();
-    commission.platformFeePaymentMethod = data.paymentMethod || null;
-    commission.platformFeePaymentReference = data.paymentReference || null;
-    commission.platformFeePaymentNotes = data.notes || null;
+    const paidDate = data.paidDate ? new Date(data.paidDate) : new Date();
+
+    if (isPlatformAdmin) {
+      // Admin verifies and marks as paid - final state
+      commission.platformFeePaid = true;
+      commission.platformFeePaidDate = paidDate;
+      commission.platformFeePaymentMethod = data.paymentMethod || null;
+      commission.platformFeePaymentReference = data.paymentReference || null;
+      commission.platformFeePaymentNotes = data.notes || null;
+    } else {
+      // Agent marks - needs admin verification; stays overdue until admin verifies
+      commission.platformFeeAgentMarkedAt = paidDate;
+      commission.platformFeePaymentMethod = data.paymentMethod || null;
+      commission.platformFeePaymentReference = data.paymentReference || null;
+      commission.platformFeePaymentNotes = data.notes || null;
+      // platformFeePaid stays false until admin verifies
+    }
 
     await commission.save();
 
+    // Sync to LeasePaymentRecord if linked
+    const paymentRecord = await LeasePaymentRecord.findById(commission.paymentRecordId);
+    if (paymentRecord) {
+      if (isPlatformAdmin) {
+        paymentRecord.platformFeePaid = true;
+        paymentRecord.platformFeePaidDate = paidDate;
+      } else {
+        paymentRecord.platformFeeAgentMarkedAt = paidDate;
+      }
+      paymentRecord.platformFeePaymentMethod = commission.platformFeePaymentMethod;
+      paymentRecord.platformFeePaymentReference = commission.platformFeePaymentReference;
+      paymentRecord.platformFeePaymentNotes = commission.platformFeePaymentNotes;
+      await paymentRecord.save();
+    }
+
     return commission.toObject();
+  }
+
+  /**
+   * Mark platform fee as paid by LeasePaymentRecord ID.
+   * Supports PENDING tenant payments (no CommissionRecord) - platform fee is charged when record is raised.
+   */
+  static async markPlatformFeeAsPaidByPaymentRecord(leasePaymentRecordId, data, agentId, isPlatformAdmin = false, agencyId = null) {
+    const paymentRecord = await LeasePaymentRecord.findById(leasePaymentRecordId).populate("leaseId", "agencyId");
+    if (!paymentRecord) {
+      throw new AppError("Payment record not found", 404);
+    }
+
+    if (paymentRecord.type !== "RENT") {
+      throw new AppError("Only rent payment records have platform fee", 400);
+    }
+
+    const platformFeeAmount = Number(paymentRecord.platformFeeAmount || 0);
+    if (platformFeeAmount === 0) {
+      throw new AppError("No platform fee to mark as paid", 400);
+    }
+
+    // Platform admin can mark any; agent can mark own; agency admin can mark agency's leases
+    if (!isPlatformAdmin) {
+      const isOwn = paymentRecord.agentId.toString() === agentId.toString();
+      const leaseAgencyId = paymentRecord.leaseId?.agencyId;
+      const isAgencyAdmin =
+        agencyId &&
+        leaseAgencyId &&
+        leaseAgencyId.toString() === agencyId.toString();
+      if (!isOwn && !isAgencyAdmin) {
+        throw new AppError("You can only mark platform fees for your own or your agency's payment records", 403);
+      }
+    }
+
+    const paidDate = data.paidDate ? new Date(data.paidDate) : new Date();
+
+    // Agent marks → platformFeeAgentMarkedAt; Admin verifies → platformFeePaid
+    if (isPlatformAdmin) {
+      paymentRecord.platformFeePaid = true;
+      paymentRecord.platformFeePaidDate = paidDate;
+    } else {
+      paymentRecord.platformFeeAgentMarkedAt = paidDate;
+    }
+    paymentRecord.platformFeePaymentMethod = data.paymentMethod || null;
+    paymentRecord.platformFeePaymentReference = data.paymentReference || null;
+    paymentRecord.platformFeePaymentNotes = data.notes || null;
+    await paymentRecord.save();
+
+    // Sync to CommissionRecord if it exists
+    const commission = await CommissionRecord.findOne({ paymentRecordId: leasePaymentRecordId });
+    if (commission) {
+      if (isPlatformAdmin) {
+        commission.platformFeePaid = true;
+        commission.platformFeePaidDate = paidDate;
+      } else {
+        commission.platformFeeAgentMarkedAt = paidDate;
+      }
+      commission.platformFeePaymentMethod = paymentRecord.platformFeePaymentMethod;
+      commission.platformFeePaymentReference = paymentRecord.platformFeePaymentReference;
+      commission.platformFeePaymentNotes = paymentRecord.platformFeePaymentNotes;
+      await commission.save();
+    }
+
+    return paymentRecord.toObject();
   }
 
   /**

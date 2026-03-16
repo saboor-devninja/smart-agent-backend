@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const LeaseService = require("../api/v1/services/leaseService");
+const CommissionService = require("../api/v1/services/commissionService");
 const LeasePaymentRecord = require("../models/LeasePaymentRecord");
 const Lease = require("../models/Lease");
 
@@ -88,7 +89,7 @@ const generateUpcomingRentPayments = async () => {
           continue;
         }
 
-        await LeasePaymentRecord.create({
+        const record = await LeasePaymentRecord.create({
           leaseId: lease._id,
           agentId: lease.agentId,
           type: "RENT",
@@ -110,6 +111,14 @@ const generateUpcomingRentPayments = async () => {
           isSecurityDeposit: false,
           charges: [],
         });
+
+        // Set platform fee (all RENT records get platform fee)
+        try {
+          const platformFee = await CommissionService.calculatePlatformFeeOnly(record.toObject());
+          await LeasePaymentRecord.updateOne({ _id: record._id }, { $set: { platformFeeAmount: platformFee } });
+        } catch (err) {
+          console.error(`[CRON] Error calculating platform fee for ${record._id}:`, err.message);
+        }
 
         createdCount += 1;
       } catch (error) {

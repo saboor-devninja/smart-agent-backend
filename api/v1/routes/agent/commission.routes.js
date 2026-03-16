@@ -1,6 +1,7 @@
 const express = require("express");
 const { isLoggedIn } = require("../../middleware/auth");
 const { validateParamId } = require("../../../../utils/validateObjectId");
+const { validateParamLeasePaymentRecordId } = require("../../../../utils/validateObjectId");
 const {
   getAgentCommissions,
   getLandlordPayments,
@@ -9,6 +10,7 @@ const {
   getRelatedByLandlordPayment,
   updateLandlordPayment,
   markPlatformFeeAsPaid,
+  markPlatformFeeAsPaidByPaymentRecord,
 } = require("../../controllers/agent/commissionController");
 
 const router = express.Router();
@@ -16,6 +18,11 @@ const router = express.Router();
 router.use(isLoggedIn);
 
 router.get("/agent", getAgentCommissions);
+router.patch(
+  "/platform-fee/records/:leasePaymentRecordId/paid",
+  validateParamLeasePaymentRecordId,
+  markPlatformFeeAsPaidByPaymentRecord
+);
 router.get("/landlord/:landlordId", getLandlordPayments);
 router.get("/related/payment/:paymentRecordId", getRelatedByPayment);
 router.get("/related/commission/:commissionRecordId", getRelatedByCommission);

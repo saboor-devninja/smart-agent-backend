@@ -74,8 +74,7 @@ class FinanceDashboardService {
     // Overdue from past months is shown in the Overdue Rent list below, not in this card
 
     // Commission Metrics - align with Rent Collection (by due date, not paid date)
-    // Platform Fee Due = platform fees from commissions for payments DUE this month that are PAID
-    // This matches "Collected" so Platform Fee ≈ 2% of Collected
+    // Platform Fee: use LeasePaymentRecord.platformFeeAmount (all statuses: PENDING, PAID, CANCELLED, etc.)
     const startOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
@@ -86,46 +85,48 @@ class FinanceDashboardService {
     const paymentsDuePrevMonth = await LeasePaymentRecord.find({
       agentId,
       type: "RENT",
-      status: { $in: ["PAID", "PARTIALLY_PAID"] },
       dueDate: { $gte: startOfPreviousMonth, $lte: endOfPreviousMonth },
     })
-      .select("_id")
+      .select("_id platformFeeAmount")
       .lean();
-    const paidPaymentIdsPrevMonth = paymentsDuePrevMonth.map((p) => p._id);
 
     const commissionsThisMonth = await CommissionRecord.find({
       agentId,
       paymentRecordId: { $in: paidPaymentIdsThisMonth },
     }).lean();
 
-    const commissionsPreviousMonth = await CommissionRecord.find({
-      agentId,
-      paymentRecordId: { $in: paidPaymentIdsPrevMonth },
-    }).lean();
-
     let commissionEarned = 0;
-    let platformFeeDue = 0;
+    let platformFeeTotal = 0;
+    let platformFeeOverdue = 0;
     let platformFeePaid = 0;
     let platformFeePreviousMonth = 0;
     let netEarnings = 0;
 
+    // Platform Fee: total, overdue, paid - from payments DUE this month
+    paymentsThisMonth.forEach((p) => {
+      const fee = normalizeAmount(p.platformFeeAmount);
+      platformFeeTotal += fee;
+
+      if (p.platformFeePaid === true) {
+        platformFeePaid += fee;
+      } else if (fee > 0 && p.dueDate && new Date(p.dueDate) < now) {
+        // Overdue: platform fee not paid, due date has passed
+        platformFeeOverdue += fee;
+      }
+    });
+
+    // Commission earned, net earnings = from CommissionRecords (PAID payments only)
     commissionsThisMonth.forEach((c) => {
       const gross = normalizeAmount(c.agentGrossCommission);
-      const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
       const net = normalizeAmount(c.agentNetCommission);
 
       commissionEarned += gross;
       netEarnings += net;
-      platformFeeDue += platformFee;
-
-      if (c.platformFeePaid === true) {
-        platformFeePaid += platformFee;
-      }
     });
 
-    commissionsPreviousMonth.forEach((c) => {
-      const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
-      platformFeePreviousMonth += platformFee;
+    // Platform Fee Previous Month = sum of platformFeeAmount from payments due previous month
+    paymentsDuePrevMonth.forEach((p) => {
+      platformFeePreviousMonth += normalizeAmount(p.platformFeeAmount);
     });
 
     const Lease = require("../../../models/Lease");
@@ -232,7 +233,8 @@ class FinanceDashboardService {
       },
       commission: {
         earned: commissionEarned,
-        platformFeeDue,
+        platformFeeTotal,
+        platformFeeOverdue,
         platformFeePaid,
         platformFeePreviousMonth,
         netEarnings,

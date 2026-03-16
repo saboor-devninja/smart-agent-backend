@@ -25,7 +25,8 @@ exports.backfillCommissions = tryCatchAsync(async (req, res, next) => {
 
 /**
  * GET /api/v1/admin/commissions
- * Get all commissions across the platform (PLATFORM_ADMIN only)
+ * Get all records with platform fee (CommissionRecords + LeasePaymentRecords without commission)
+ * so admin can mark platform fee on all - paid or not (PLATFORM_ADMIN only)
  */
 exports.getAllCommissions = tryCatchAsync(async (req, res, next) => {
   if (req.user.role !== "PLATFORM_ADMIN") {
@@ -40,12 +41,12 @@ exports.getAllCommissions = tryCatchAsync(async (req, res, next) => {
   if (startDate) filters.startDate = startDate;
   if (endDate) filters.endDate = endDate;
 
-  const commissions = await CommissionService.getAllCommissions(filters);
+  const commissions = await CommissionService.getAllPlatformFeeRecords(filters);
 
   return apiResponse.successResponse(
     res,
     { commissions },
-    "Commissions retrieved successfully",
+    "Platform fee records retrieved successfully",
     success
   );
 });

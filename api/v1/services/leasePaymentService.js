@@ -68,6 +68,10 @@ class LeasePaymentService {
         ...r,
         amountDue: normalizeAmount(r.amountDue),
         amountPaid: normalizeAmount(r.amountPaid),
+        platformFeeAmount: normalizeAmount(r.platformFeeAmount) ?? 0,
+        platformFeeAgentMarkedAt: r.platformFeeAgentMarkedAt ?? null,
+        platformFeePaid: Boolean(r.platformFeePaid),
+        platformFeePaidDate: r.platformFeePaidDate ?? null,
         charges: Array.isArray(r.charges)
           ? r.charges.map((c) => ({
               ...c,
@@ -155,6 +159,8 @@ class LeasePaymentService {
       }
     }
 
+    const status = data.status || "PENDING";
+    const isPaid = status === "PAID";
     const record = await LeasePaymentRecord.create({
       leaseId,
       agentId,
@@ -162,11 +168,11 @@ class LeasePaymentService {
       label: data.label,
       dueDate: data.dueDate || null,
       amountDue: data.amountDue,
-      status: data.status || "PENDING",
-      amountPaid: null,
-      paidDate: null,
-      paymentMethod: null,
-      paymentReference: null,
+      status,
+      amountPaid: isPaid ? (data.amountPaid ?? data.amountDue) : null,
+      paidDate: isPaid ? (data.paidDate || data.dueDate || null) : null,
+      paymentMethod: isPaid ? (data.paymentMethod || null) : null,
+      paymentReference: isPaid ? (data.paymentReference || null) : null,
       notes: data.notes || null,
       charges: Array.isArray(data.charges)
         ? data.charges.map((c) => ({
@@ -203,6 +209,17 @@ class LeasePaymentService {
       // Don't fail the creation if PDF generation fails
     }
 
+    // Calculate and store platform fee (for RENT type, all statuses including CANCELLED/PARTIALLY_PAID)
+    if (record.type === "RENT") {
+      try {
+        const platformFee = await CommissionService.calculatePlatformFeeOnly(record.toObject());
+        record.platformFeeAmount = platformFee;
+        await record.save();
+      } catch (err) {
+        console.error("Error calculating platform fee for new payment:", err);
+      }
+    }
+
     await this._syncPrerequisitesForRecord(record);
 
     // Create commission when payment is created with status PAID (e.g. adding historical paid rent)
@@ -229,13 +246,39 @@ class LeasePaymentService {
       }
     }
 
-    // Create notification for rent due
-    try {
-      const { notifyRentDue } = require("../../../utils/notificationHelper");
-      await notifyRentDue(record._id, leaseId, agentId);
-    } catch (error) {
-      console.error("Error creating rent due notification:", error);
-      // Don't fail payment record creation if notification fails
+    // Create notification for rent due (skip for already-paid records)
+    if (record.status !== "PAID") {
+      try {
+        const { notifyRentDue } = require("../../../utils/notificationHelper");
+        await notifyRentDue(record._id, leaseId, agentId);
+      } catch (error) {
+        console.error("Error creating rent due notification:", error);
+        // Don't fail payment record creation if notification fails
+      }
+    }
+
+    // Generate receipt PDF when created with PAID status
+    if (record.status === "PAID" && !record.receiptUrl) {
+      try {
+        const property = await Property.findById(lease.propertyId).lean();
+        const tenant = await Tenant.findById(lease.tenantId).lean();
+        const landlord = await Landlord.findById(lease.landlordId).lean();
+        const effectiveAgentId = agentId || record.agentId || lease.agentId;
+        const agent = effectiveAgentId ? await User.findById(effectiveAgentId).lean() : null;
+
+        if (property && tenant && landlord && agent) {
+          const currencySettings = {
+            currencySymbol: agent.currencySymbol || "$",
+            currencyLocale: agent.currencyLocale || "en-US",
+          };
+          const receiptUrl = await generateReceiptPDF(record, lease, property, tenant, landlord, agent, currencySettings);
+          record.receiptUrl = receiptUrl;
+          await record.save();
+        }
+      } catch (error) {
+        console.error("Error generating receipt PDF for paid payment:", error);
+        // Don't fail creation if receipt generation fails
+      }
     }
 
     return record.toObject();
@@ -324,6 +367,18 @@ class LeasePaymentService {
     }
 
     await record.save();
+
+    // Recalculate platform fee when amount or charges change (RENT type, all statuses)
+    const amountOrChargesChanged = data.amountDue !== undefined || (data.charges !== undefined && Array.isArray(data.charges));
+    if (record.type === "RENT" && amountOrChargesChanged) {
+      try {
+        const platformFee = await CommissionService.calculatePlatformFeeOnly(record.toObject());
+        await LeasePaymentRecord.updateOne({ _id: record._id }, { $set: { platformFeeAmount: platformFee } });
+        record.platformFeeAmount = platformFee;
+      } catch (err) {
+        console.error("Error recalculating platform fee:", err);
+      }
+    }
 
     // Handle commission records based on payment status
     try {

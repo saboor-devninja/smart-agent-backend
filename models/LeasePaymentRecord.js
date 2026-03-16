@@ -110,6 +110,36 @@ const leasePaymentRecordSchema = new mongoose.Schema(
       ref: "LandlordPayment",
       default: null,
     },
+    platformFeeAmount: {
+      type: mongoose.Schema.Types.Decimal128,
+      default: null,
+    },
+    // Platform fee payment tracking (for records without CommissionRecord, e.g. PENDING tenant)
+    // Agent marks → platformFeeAgentMarkedAt set; Admin verifies → platformFeePaid = true
+    platformFeeAgentMarkedAt: {
+      type: Date,
+      default: null,
+    },
+    platformFeePaid: {
+      type: Boolean,
+      default: false,
+    },
+    platformFeePaidDate: {
+      type: Date,
+      default: null,
+    },
+    platformFeePaymentMethod: {
+      type: String,
+      default: null,
+    },
+    platformFeePaymentReference: {
+      type: String,
+      default: null,
+    },
+    platformFeePaymentNotes: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
