@@ -73,18 +73,34 @@ class FinanceDashboardService {
     // Rent Collection overdue = current month only (payments due this month that are past due)
     // Overdue from past months is shown in the Overdue Rent list below, not in this card
 
-    // Commission Metrics (Current Month)
-    const commissionsThisMonth = await CommissionRecord.find({
-      agentId,
-      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-    }).lean();
-
-    // Commission Metrics (Previous Month)
+    // Commission Metrics - align with Rent Collection (by due date, not paid date)
+    // Platform Fee Due = platform fees from commissions for payments DUE this month that are PAID
+    // This matches "Collected" so Platform Fee ≈ 2% of Collected
     const startOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    const paidPaymentIdsThisMonth = paymentsThisMonth
+      .filter((p) => p.status === "PAID" || p.status === "PARTIALLY_PAID")
+      .map((p) => p._id);
+
+    const paymentsDuePrevMonth = await LeasePaymentRecord.find({
+      agentId,
+      type: "RENT",
+      status: { $in: ["PAID", "PARTIALLY_PAID"] },
+      dueDate: { $gte: startOfPreviousMonth, $lte: endOfPreviousMonth },
+    })
+      .select("_id")
+      .lean();
+    const paidPaymentIdsPrevMonth = paymentsDuePrevMonth.map((p) => p._id);
+
+    const commissionsThisMonth = await CommissionRecord.find({
+      agentId,
+      paymentRecordId: { $in: paidPaymentIdsThisMonth },
+    }).lean();
+
     const commissionsPreviousMonth = await CommissionRecord.find({
       agentId,
-      createdAt: { $gte: startOfPreviousMonth, $lte: endOfPreviousMonth },
+      paymentRecordId: { $in: paidPaymentIdsPrevMonth },
     }).lean();
 
     let commissionEarned = 0;
@@ -93,28 +109,20 @@ class FinanceDashboardService {
     let platformFeePreviousMonth = 0;
     let netEarnings = 0;
 
-    // Current month calculations - use platformCommission (covers agent fee + 2% on rent when no agent commission)
     commissionsThisMonth.forEach((c) => {
       const gross = normalizeAmount(c.agentGrossCommission);
       const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
       const net = normalizeAmount(c.agentNetCommission);
 
-      // Commission earned: Total gross commission (current month)
       commissionEarned += gross;
-
-      // Net earnings: Agent earnings after platform fee (current month)
       netEarnings += net;
-
-      // Platform fee due: All platform fees from current month commissions
       platformFeeDue += platformFee;
 
-      // Platform fee paid: Only count platform fees that have been marked as paid
       if (c.platformFeePaid === true) {
         platformFeePaid += platformFee;
       }
     });
 
-    // Previous month platform fee calculation
     commissionsPreviousMonth.forEach((c) => {
       const platformFee = normalizeAmount(c.platformCommission ?? c.agentPlatformFee);
       platformFeePreviousMonth += platformFee;
