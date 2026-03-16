@@ -616,7 +616,7 @@ class CommissionService {
     const payments = await LandlordPayment.find(query)
       .populate("leaseId", "leaseNumber startDate endDate")
       .populate("propertyId", "title address currency currencySymbol currencyLocale")
-      .populate("paymentRecordId", "label type dueDate isFirstMonthRent isSecurityDeposit")
+      .populate("paymentRecordId", "label type dueDate status isFirstMonthRent isSecurityDeposit")
       .sort({ createdAt: -1 })
       .lean();
 
