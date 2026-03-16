@@ -114,8 +114,11 @@ class CommissionService {
         if (agentNetCommission < 0) agentNetCommission = 0;
         platformCommission = agentPlatformFee;
       } else {
-        // No agent commission: Platform takes 2% of rent (landlord pays platform fee)
-        platformCommission = (totalPaymentAmount * platformFeePercentage) / 100;
+        // No agent commission: Platform takes % of rent from landlord (default 2%)
+        // Note: property.platformFeePercentage is set to 20 by propertyService when commissionType exists
+        // (for agent commission case). When agent has no commission, use 2% of rent - not 20%
+        const landlordPlatformPct = platformFeePercentage <= 10 ? platformFeePercentage : 2;
+        platformCommission = (totalPaymentAmount * landlordPlatformPct) / 100;
       }
     }
 

@@ -25,9 +25,9 @@ class PropertyService {
     const currencySymbol = data.currencySymbol || agent?.currencySymbol || '$';
     const currencyLocale = data.currencyLocale || agent?.currencyLocale || 'en-US';
 
-    const platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
-      ? 2.0 
-      : 20.0;
+    const platformFeePercentage = data.platformFeePercentage !== undefined && data.platformFeePercentage !== null && data.platformFeePercentage !== ''
+      ? Number(data.platformFeePercentage)
+      : (!data.commissionType || data.commissionType === 'NONE' ? 2.0 : 20.0);
     const propertyData = {
       agentId: propertyAgentId,
       landlordId: data.landlordId,
@@ -452,8 +452,10 @@ class PropertyService {
     if (data.latitude !== undefined) updateData.latitude = data.latitude;
     if (data.longitude !== undefined) updateData.longitude = data.longitude;
 
-    // Update platform fee if commission type changes
-    if (data.commissionType !== undefined) {
+    // Update platform fee if commission type changes (only when not explicitly provided)
+    if (data.platformFeePercentage !== undefined && data.platformFeePercentage !== null && data.platformFeePercentage !== '') {
+      updateData.platformFeePercentage = Number(data.platformFeePercentage);
+    } else if (data.commissionType !== undefined) {
       updateData.platformFeePercentage = !data.commissionType || data.commissionType === 'NONE' 
         ? 2.0 
         : 20.0;
